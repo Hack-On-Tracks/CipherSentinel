@@ -26,3 +26,5 @@ web/node_modules/
 # Local device enrollment material (keep private key local)
 device-registration/*-private-key.pem
 device-registration/
+.vercel
+.env*
