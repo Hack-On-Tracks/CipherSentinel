@@ -8,10 +8,5 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "env": {
-    "VITE_API_URL": {
-      "description": "URL of the FastAPI backend (e.g. https://ciphersentinel-api.onrender.com)"
-    }
-  }
+  ]
 }
