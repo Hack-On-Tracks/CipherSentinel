@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
+import { fetchCertificateDevices } from '../api.js'
 
 const ENTITIES_DATA = [
   {
@@ -174,6 +176,9 @@ export default function EntitiesPage() {
   const [activeTab, setActiveTab] = useState('all') // 'all', 'users', 'devices', 'destinations'
   const [searchQuery, setSearchQuery] = useState('')
   const [panelTab, setPanelTab] = useState('overview') // 'overview', 'activity', 'alerts', 'related'
+  const { data: certificateData, isLoading: certificatesLoading, isError: certificatesError } = useQuery({
+    queryKey: ['certificate-devices'], queryFn: fetchCertificateDevices, refetchInterval: 5000,
+  })
 
   const selectedEntity = ENTITIES_DATA.find(e => e.id === selectedEntityId) || ENTITIES_DATA[0]
 
@@ -226,6 +231,28 @@ export default function EntitiesPage() {
         <h1 className="entities-title">Entities</h1>
         <p className="entities-subtitle">Monitor and analyse users, devices and destinations for potential insider threats.</p>
       </div>
+
+      <section className="certificate-inventory-card" aria-labelledby="certificate-inventory-title">
+        <div className="certificate-inventory-heading">
+          <div><h2 id="certificate-inventory-title">Device certificate enrollment</h2><p>Public certificate metadata · private keys stay on their devices</p></div>
+          <span>{certificateData?.devices?.filter(d => d.enrollment_status === 'enrolled').length || 0} enrolled</span>
+        </div>
+        {certificatesLoading ? <p className="certificate-inventory-message">Loading certificate inventory…</p>
+          : certificatesError ? <p className="certificate-inventory-message">Certificate inventory is unavailable. Check that the API is running.</p>
+            : <div className="certificate-table-wrap"><table className="certificate-table"><thead><tr><th>DEVICE</th><th>ORGANIZATION</th><th>OS</th><th>CERTIFICATE</th><th>ENROLLMENT</th></tr></thead><tbody>
+              {(certificateData?.devices || []).map(device => {
+                const status = device.lifecycle_status === 'revoked' ? 'Revoked' : ({
+                  pending: 'Awaiting CSR', 'csr-pending-admin-approval': 'CSR pending approval',
+                  'certificate-issued-install-pending': 'Issued · install pending',
+                  'certificate-verified-install-pending': 'Verified · install pending', enrolled: 'Enrolled',
+                }[device.enrollment_status] || device.enrollment_status)
+                return <tr key={device.device_id}><td><strong>{device.device_id}</strong><small>{device.hostname || device.asset_label}</small></td>
+                  <td>{device.organization_id}{device.organization_id === 'ORG-B' ? ' · external' : ''}</td><td>{device.os || 'Owner confirmation pending'}</td>
+                  <td>{device.certificate_serial ? <><strong>{device.issuing_ca}</strong><small>Serial {device.certificate_serial}</small></> : 'Not issued'}</td>
+                  <td><span className={`certificate-state ${device.enrollment_status === 'enrolled' ? 'certificate-state-done' : device.enrollment_status === 'certificate-issued-install-pending' || device.enrollment_status === 'certificate-verified-install-pending' ? 'certificate-state-issued' : ''}`}>{status}</span></td></tr>
+              })}
+            </tbody></table></div>}
+      </section>
 
       {/* ── 4 KPI Metric Cards ───────────────────────────────────────────── */}
       <div className="entities-kpi-grid">

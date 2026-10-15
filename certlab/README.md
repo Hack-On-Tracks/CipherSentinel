@@ -7,24 +7,21 @@ silently enroll devices or claim RADIUS enforcement.
 
 ## Inventory
 
-The supplied inventory contains four pending device records. The current Mac's
-hostname was observed as `Malavyas-MacBook-Air.local`. Windows names and OSes
-were supplied by the requester and must be confirmed by their owners during
-enrollment. Hostname is metadata only; the stable ID and validated certificate
-are the identity.
+The corrected inventory contains two Organization A devices and one external
+Organization B device. Windows hostnames and OSes were supplied by the
+requester and must be confirmed by their owners during enrollment. Hostname is
+metadata only; the stable ID and validated certificate are the identity.
 
 | Organization | Device ID | Hostname / label | OS | State |
 |---|---|---|---|---|
-| A | ORG-A-DEVICE-001 | LAPTOP-B4EE7HH6 | Windows | Pending owner confirmation |
+| A | ORG-A-DEVICE-001 | LAPTOP-B4EE7HH6 | Windows | Certificate issued; owner verification pending |
 | A | ORG-A-DEVICE-002 | LAPTOP-3PPEMVCS | Windows | Pending owner confirmation |
-| A | ORG-A-DEVICE-003 | Malavya’s MacBook Air (`Malavyas-MacBook-Air.local`) | macOS | Pending certificate enrollment |
 | B (external) | ORG-B-DEVICE-001 | Rainamishra-23 | Windows | Pending owner confirmation |
 
-All records are pending; no certificates have been issued or installed. The
-local machine had OpenSSL 4.0.3, Python 3.15.0, and FreeRADIUS `radiusd`
-available. macOS 27.0.1 was detected. Interface names are present, but the
-environment did not establish whether any Wi-Fi AP/switch supports 802.1X and
-RADIUS; no network hardware was changed.
+One Org A certificate has been issued, but it is not installed yet. The local
+machine had OpenSSL 4.0.3, Python 3.15.0, and FreeRADIUS 3.2.10 available.
+macOS 27.0.1 was detected. Wi-Fi is inactive and no compatible 802.1X access
+point/switch was confirmed; no network hardware was changed.
 
 ## Prepare the administrator workspace
 
@@ -53,7 +50,7 @@ CSR under the ignored `certlab/requests/` directory. The organization prompt
 is a confirmation only; it does not grant membership.
 
 ```sh
-python3 certlab/enroll.py request --org ORG-A --device-id ORG-A-DEVICE-003
+python3 certlab/enroll.py request --org ORG-A --device-id ORG-A-DEVICE-002
 ```
 
 Windows: install Python 3 and OpenSSL 3+ from trusted official distributions,
@@ -74,14 +71,15 @@ unknown IDs, duplicate CSRs, and already-enrolled identities; it prompts for
 the encrypted CA key passphrase.
 
 ```sh
-python3 certlab/enroll.py sign --org ORG-A --device-id ORG-A-DEVICE-003 --csr certlab/requests/ORG-A-DEVICE-003.csr
+python3 certlab/enroll.py sign --org ORG-A --device-id ORG-A-DEVICE-002 --csr certlab/requests/ORG-A-DEVICE-002.csr
 ```
 
 Return the signed `.crt` and the matching public CA `.crt` to the owner. On
-the device, place them in the ignored `certlab/issued/` directory and run:
+the device, place both public certificates in the ignored `certlab/issued/`
+directory and run:
 
 ```sh
-python3 certlab/enroll.py verify --org ORG-A --device-id ORG-A-DEVICE-003 --cert certlab/issued/ORG-A-DEVICE-003.crt --key certlab/requests/ORG-A-DEVICE-003.key
+python3 certlab/enroll.py verify --org ORG-A --device-id ORG-A-DEVICE-002 --cert certlab/issued/ORG-A-DEVICE-002.crt --key certlab/requests/ORG-A-DEVICE-002.key --ca-cert certlab/issued/ORG-A-CA.crt
 ```
 
 This checks CA chain, client-auth EKU, validity, subject device ID, key match,
@@ -96,18 +94,20 @@ After importing and testing the certificate in the OS store, an administrator
 can record that confirmation:
 
 ```sh
-python3 certlab/enroll.py mark-installed --device-id ORG-A-DEVICE-003
+python3 certlab/enroll.py mark-installed --device-id ORG-A-DEVICE-002
 ```
 
 ## Inventory and lifecycle
 
-`inventory.json` contains public metadata only. Successful administrator
-verification records serial, SHA-256 fingerprint, issuer, and validity. To
+`inventory.json` contains public metadata only. The Entities page reads it
+through `GET /api/certificates/devices` and displays organization, device,
+certificate, and enrollment status. Verification records serial, SHA-256
+certificate and CA fingerprints, issuer, and validity. To
 revoke a device, mark its inventory lifecycle state and preserve the reason
 without personal details:
 
 ```sh
-python3 certlab/enroll.py revoke --device-id ORG-A-DEVICE-003 --reason lost
+python3 certlab/enroll.py revoke --device-id ORG-A-DEVICE-002 --reason lost
 ```
 
 For actual RADIUS rejection, publish an updated CRL and configure/test the
@@ -125,6 +125,11 @@ not delete inventory or source configuration.
 
 ## CipherSentinel / RADIUS integration
 
+`inventory.json` contains public metadata only. The Entities page reads it
+through `GET /api/certificates/devices` and displays organization, device,
+certificate, and enrollment status. Verification records serial, SHA-256
+certificate and CA fingerprints, issuer, and validity.
+
 Use validated RADIUS accounting/authentication records to enrich flow records
 with device ID, issuer, session ID, and authentication result. Treat IP address
 as supporting evidence and keep user attribution `unknown` unless another
@@ -134,12 +139,14 @@ repository, so this lab does not invent or infer user identity. See
 
 ## Current completion status
 
-- Environment discovery and a four-device pending inventory are complete.
-- Enrollment is not complete: three Windows owners must confirm actual hostname,
-  OS, and generate their own keys/CSRs; the Mac owner must generate and verify
-  its device key/certificate as well.
-- CA files have not been created, and no private keys or passphrases were
-  generated in this setup turn.
+- Environment discovery and a three-device inventory are complete.
+- `ORG-A-DEVICE-001` has a signed certificate. Its chain, identity, SAN, and
+  public-key match to the submitted CSR were verified. The device owner still
+  needs to verify against the local private key and install it; it is not
+  marked enrolled.
+- The Org A CA exists. The Org B CA and remaining device certificates are
+  pending. The two remaining device owners must confirm actual hostnames and
+  OSes and generate their own keys/CSRs.
 - No compatible 802.1X hardware was confirmed. Real 802.1X enforcement is not
   verified; the current deliverable is an enrollment workflow and RADIUS lab
   guide, not an active network policy.

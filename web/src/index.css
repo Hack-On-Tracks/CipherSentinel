@@ -1418,6 +1418,22 @@ html, body {
   margin-bottom: 22px;
 }
 
+.certificate-inventory-card { margin: 0 0 22px; padding: 18px 20px; border: 1px solid var(--border-color, #e5ebe7); border-radius: 14px; background: var(--surface, #fff); box-shadow: 0 2px 8px #20382b0a; }
+.certificate-inventory-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:14px; }
+.certificate-inventory-heading h2 { margin:0; color:var(--text-main, #26352c); font-size:17px; }
+.certificate-inventory-heading p { margin:5px 0 0; color:var(--text-muted, #78847d); font-size:12px; }
+.certificate-inventory-heading > span { padding:7px 10px; border-radius:999px; background:#edf6ef; color:#34704c; font-size:12px; font-weight:700; white-space:nowrap; }
+.certificate-inventory-message { color:var(--text-muted, #78847d); font-size:13px; }
+.certificate-table-wrap { overflow-x:auto; }
+.certificate-table { width:100%; border-collapse:collapse; text-align:left; font-size:12px; }
+.certificate-table th { padding:9px 10px; color:var(--text-muted, #78847d); font-size:10px; letter-spacing:.06em; }
+.certificate-table td { padding:11px 10px; border-top:1px solid var(--border-color, #edf0ee); color:var(--text-main, #334139); vertical-align:middle; }
+.certificate-table td strong,.certificate-table td small { display:block; }
+.certificate-table td small { margin-top:3px; color:var(--text-muted, #78847d); font-size:11px; }
+.certificate-state { display:inline-block; padding:5px 8px; border-radius:999px; background:#f1f3f2; color:#65716a; font-weight:700; white-space:nowrap; }
+.certificate-state-issued { background:#fff4df; color:#8a5a12; }
+.certificate-state-done { background:#e9f6ed; color:#2c7047; }
+
 .entities-title {
   font-size: 28px;
   font-weight: 800;

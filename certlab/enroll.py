@@ -90,7 +90,7 @@ def initialize_ca(args: argparse.Namespace) -> None:
     run(["openssl", "genpkey", "-algorithm", "RSA", "-aes-256-cbc", "-pkeyopt", "rsa_keygen_bits:3072", "-out", str(key)])
     os.chmod(key, 0o600)
     try:
-        run(["openssl", "req", "-new", "-x509", "-key", str(key), "-sha256", "-days", "3650", "-subj", f"/O=CipherSentinel/{args.org}/CN={name}", "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0", "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-out", str(cert)])
+        run(["openssl", "req", "-new", "-x509", "-key", str(key), "-sha256", "-days", "3650", "-subj", f"/O=CipherSentinel/OU={args.org}/CN={name}", "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0", "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-out", str(cert)])
     except EnrollmentError:
         key.unlink(missing_ok=True)
         raise
@@ -168,6 +168,16 @@ def sign(args: argparse.Namespace) -> None:
     finally:
         extfile.unlink(missing_ok=True)
     os.chmod(dest, 0o644)
+    fields = cert_fields(dest)
+    ca_fingerprint = run(["openssl", "x509", "-in", str(ca_cert), "-noout", "-fingerprint", "-sha256"], capture=True).split("=", 1)[-1]
+    device["certificate_serial"] = fields.get("serial")
+    device["certificate_sha256"] = fields.get("sha256 Fingerprint", "").replace(":", "").lower()
+    device["issuing_ca"] = ORG_CA[args.org]
+    device["issuing_ca_sha256"] = ca_fingerprint.replace(":", "").lower()
+    device["not_before"] = fields.get("notBefore")
+    device["not_after"] = fields.get("notAfter")
+    device["enrollment_status"] = "certificate-issued-install-pending"
+    save_inventory(data)
     print(f"Signed {dest}. The owner must verify the cert and install it before enrollment is considered complete.")
 
 
@@ -183,7 +193,10 @@ def verify(args: argparse.Namespace) -> None:
     if device["organization_id"] != args.org:
         raise EnrollmentError("Device organization mapping does not match the selected CA")
     cert, private_key = Path(args.cert).resolve(), Path(args.key).resolve()
-    key, ca_cert = org_paths(args.org)
+    _, default_ca_cert = org_paths(args.org)
+    ca_cert = Path(args.ca_cert).resolve() if args.ca_cert else ISSUED / f"{ORG_CA[args.org]}.crt"
+    if not ca_cert.is_file():
+        ca_cert = default_ca_cert
     if not cert.is_file() or not private_key.is_file() or not ca_cert.is_file():
         raise EnrollmentError("Certificate, device-local key, and public CA certificate are all required")
     run(["openssl", "verify", "-purpose", "sslclient", "-CAfile", str(ca_cert), str(cert)])
@@ -201,6 +214,7 @@ def verify(args: argparse.Namespace) -> None:
     device["certificate_serial"] = fields.get("serial")
     device["certificate_sha256"] = fields.get("sha256 Fingerprint", "").replace(":", "").lower()
     device["issuing_ca"] = ORG_CA[args.org]
+    device["issuing_ca_sha256"] = run(["openssl", "x509", "-in", str(ca_cert), "-noout", "-fingerprint", "-sha256"], capture=True).split("=", 1)[-1].replace(":", "").lower()
     device["not_before"] = fields.get("notBefore")
     device["not_after"] = fields.get("notAfter")
     device["enrollment_status"] = "certificate-verified-install-pending"
@@ -261,6 +275,7 @@ def main() -> int:
     p.add_argument("--device-id", required=True)
     p.add_argument("--cert", required=True)
     p.add_argument("--key", required=True)
+    p.add_argument("--ca-cert", help="Path to the public issuing CA certificate")
     p.set_defaults(func=verify)
     p = sub.add_parser("mark-installed", help="Record owner-confirmed OS certificate import")
     p.add_argument("--device-id", required=True)

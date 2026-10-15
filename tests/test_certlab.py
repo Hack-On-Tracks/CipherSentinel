@@ -30,13 +30,14 @@ class CertificateLabTests(unittest.TestCase):
     def openssl(self, *args):
         return subprocess.run(["openssl", *map(str, args)], check=True, capture_output=True, text=True)
 
-    def test_inventory_has_four_distinct_pending_devices_and_no_secrets(self):
+    def test_inventory_has_three_distinct_devices_and_no_secrets(self):
         inventory = enroll.load_inventory()
         devices = inventory["devices"]
-        self.assertEqual(len(devices), 4)
-        self.assertEqual(len({d["device_id"] for d in devices}), 4)
+        self.assertEqual(len(devices), 3)
+        self.assertEqual(len({d["device_id"] for d in devices}), 3)
         self.assertEqual({d["organization_id"] for d in devices}, {"ORG-A", "ORG-B"})
-        self.assertTrue(all(d["enrollment_status"] == "pending" for d in devices))
+        self.assertEqual(sum(d["organization_id"] == "ORG-A" for d in devices), 2)
+        self.assertEqual(sum(d["organization_id"] == "ORG-B" for d in devices), 1)
         content = json.dumps(inventory).lower()
         self.assertNotIn("private_key", content)
         self.assertNotIn("passphrase", content)

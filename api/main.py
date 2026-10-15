@@ -24,6 +24,7 @@ from api.config import MODEL_PATH, REPLAY_INTERVAL_SEC, SCALER_PATH  # noqa: E40
 from ml.generate import SCENARIO_USERS  # noqa: E402
 
 DATA_DIR = BASE_DIR / "data"
+CERT_INVENTORY_PATH = BASE_DIR / "certlab" / "inventory.json"
 SCENARIOS = [
     {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
     {"id": "S2", "name": "Single 400 MB upload at 02:00", "expected": "High alert"},
@@ -314,6 +315,28 @@ def list_entities():
                           "alert_count": len(alerts), "max_risk": max((a.get("risk", 0) for a in alerts), default=0)})
     summaries.sort(key=lambda x: x["max_risk"], reverse=True)
     return {"entities": summaries}
+
+
+@app.get("/api/certificates/devices")
+def list_certificate_devices():
+    """Expose public certificate inventory metadata; never serve key material."""
+    try:
+        inventory = _read_json(CERT_INVENTORY_PATH, {})
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(503, "Certificate inventory is unavailable") from exc
+    if not isinstance(inventory, dict) or not isinstance(inventory.get("devices"), list):
+        raise HTTPException(503, "Certificate inventory is not configured")
+    public_fields = (
+        "device_id", "organization_id", "asset_label", "hostname", "os",
+        "certificate_serial", "certificate_sha256", "issuing_ca", "issuing_ca_sha256",
+        "not_before", "not_after", "enrollment_status", "lifecycle_status",
+    )
+    devices = [{key: item.get(key) for key in public_fields} for item in inventory["devices"] if isinstance(item, dict)]
+    organizations = [
+        {"id": item.get("id"), "name": item.get("name"), "ca_id": item.get("ca_id"), "status": item.get("status")}
+        for item in inventory.get("organizations", []) if isinstance(item, dict)
+    ]
+    return {"organizations": organizations, "devices": devices}
 
 
 @app.get("/api/scenarios")
