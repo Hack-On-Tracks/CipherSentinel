@@ -1,0 +1,13 @@
+{
+  "github.com": "sanctioned", "api.github.com": "sanctioned", "gitlab.com": "sanctioned", "bitbucket.org": "sanctioned",
+  "s3.amazonaws.com": "sanctioned", "storage.googleapis.com": "sanctioned", "azureedge.net": "sanctioned", "cloudfront.net": "sanctioned",
+  "drive.google.com": "sanctioned", "docs.google.com": "sanctioned", "sharepoint.com": "sanctioned", "onedrive.live.com": "sanctioned",
+  "box.com": "sanctioned", "slack.com": "sanctioned", "zoom.us": "sanctioned", "docusign.com": "sanctioned", "netsuite.com": "sanctioned",
+  "bamboohr.com": "sanctioned", "salesforce.com": "sanctioned", "hubspot.com": "sanctioned", "npmjs.com": "sanctioned",
+  "pypi.org": "sanctioned", "atlassian.net": "sanctioned", "figma.com": "sanctioned", "microsoftonline.com": "sanctioned",
+  "dropbox.com": "personal_file_sharing", "mega.nz": "personal_file_sharing", "icloud.com": "personal_file_sharing", "drive.usercontent.google.com": "personal_file_sharing",
+  "mediafire.com": "personal_file_sharing", "pcloud.com": "personal_file_sharing", "sync.com": "personal_file_sharing", "4shared.com": "personal_file_sharing",
+  "wetransfer.com": "file_transfer", "transfer.sh": "file_transfer", "sendspace.com": "file_transfer", "file.io": "file_transfer",
+  "gofile.io": "file_transfer", "wormhole.app": "file_transfer", "anonfiles.com": "anonymiser", "proton.me": "anonymiser",
+  "protonmail.com": "anonymiser", "torproject.org": "anonymiser", "mullvad.net": "anonymiser", "tails.net": "anonymiser"
+}

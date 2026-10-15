@@ -21,9 +21,9 @@ random.seed(SEED)
 ROLES = {
     "engineer":   {"n": 8,  "work_hours": (8,20),  "upload_mb_median": 150, "upload_mb_mad": 80},
     "finance":    {"n": 6,  "work_hours": (9,18),   "upload_mb_median": 10,  "upload_mb_mad": 5},
+    "design":     {"n": 5,  "work_hours": (9,18),   "upload_mb_median": 18,  "upload_mb_mad": 8},
     "hr":         {"n": 5,  "work_hours": (9,17),   "upload_mb_median": 8,   "upload_mb_mad": 4},
-    "sales":      {"n": 7,  "work_hours": (8,19),   "upload_mb_median": 20,  "upload_mb_mad": 10},
-    "executive":  {"n": 4,  "work_hours": (7,22),   "upload_mb_median": 30,  "upload_mb_mad": 15},
+    "sales":      {"n": 6,  "work_hours": (8,19),   "upload_mb_median": 20,  "upload_mb_mad": 10},
 }
 
 # Destination category mix per role  {sni: category}
@@ -35,26 +35,25 @@ DEST_PROFILES = {
         ("dropbox.com","personal_file_sharing",0.05),("transfer.sh","file_transfer",0.05),
     ],
     "finance": [
-        ("drive.google.com","sanctioned",0.35),("sharepoint.com","sanctioned",0.3),
-        ("docusign.com","sanctioned",0.15),("onedrive.live.com","sanctioned",0.1),
-        ("dropbox.com","personal_file_sharing",0.05),("gmail.com","personal_mail",0.05),
+        ("netsuite.com","sanctioned",0.25),("drive.google.com","sanctioned",0.25),
+        ("sharepoint.com","sanctioned",0.25),("docusign.com","sanctioned",0.15),
+        ("dropbox.com","personal_file_sharing",0.05),("gmail.com","unknown",0.05),
+    ],
+    "design": [
+        ("figma.com","sanctioned",0.35),("drive.google.com","sanctioned",0.25),
+        ("sharepoint.com","sanctioned",0.2),("storage.googleapis.com","sanctioned",0.1),
+        ("dropbox.com","personal_file_sharing",0.1),
     ],
     "hr": [
         ("drive.google.com","sanctioned",0.4),("sharepoint.com","sanctioned",0.3),
         ("bamboohr.com","sanctioned",0.2),("dropbox.com","personal_file_sharing",0.05),
-        ("gmail.com","personal_mail",0.05),
+        ("gmail.com","unknown",0.05),
     ],
     "sales": [
         ("salesforce.com","sanctioned",0.3),("drive.google.com","sanctioned",0.2),
         ("sharepoint.com","sanctioned",0.15),("dropbox.com","personal_file_sharing",0.1),
-        ("wetransfer.com","file_transfer",0.1),("gmail.com","personal_mail",0.1),
+        ("wetransfer.com","file_transfer",0.1),("gmail.com","unknown",0.1),
         ("box.com","sanctioned",0.05),
-    ],
-    "executive": [
-        ("drive.google.com","sanctioned",0.3),("sharepoint.com","sanctioned",0.2),
-        ("onedrive.live.com","sanctioned",0.15),("salesforce.com","sanctioned",0.1),
-        ("dropbox.com","personal_file_sharing",0.1),("zoom.us","sanctioned",0.1),
-        ("mega.nz","personal_file_sharing",0.05),
     ],
 }
 
@@ -249,7 +248,8 @@ def main(seed=SEED, out_dir="data"):
     df.to_csv(flows_path, index=False)
     print(f"[generate] {len(df)} flows -> {flows_path}")
 
-    gt = df[df["label"] == "exfiltration"][["flow_id","user_id","ts","scenario","sni","out_bytes"]]
+    # This labels *all* scenario events; benign controls S1 and S6 remain explicit.
+    gt = df[df["scenario"].notna()][["flow_id","user_id","ts","scenario","label","sni","out_bytes"]]
     gt_path = os.path.join(out_dir, "ground_truth.csv")
     gt.to_csv(gt_path, index=False)
     print(f"[generate] {len(gt)} labelled events -> {gt_path}")

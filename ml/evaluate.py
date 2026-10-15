@@ -46,7 +46,10 @@ def method_A(row: pd.Series) -> bool:
 
 
 def method_B_scores(df: pd.DataFrame) -> np.ndarray:
-    X = df[FEATURE_COLS].fillna(0.0).values.astype(float)
+    # Deliberately raw comparator (unlike production's normalized model).
+    raw_cols = ["out_bytes", "in_bytes", "out_in_ratio", "conn_count", "max_duration",
+                "hour_of_week", "new_dest_user", "new_dest_org", "ja4_rare"]
+    X = df[raw_cols].fillna(0.0).values.astype(float)
     scaler_b = RobustScaler()
     X_s = scaler_b.fit_transform(X)
     iso_b = IsolationForest(contamination=0.05, random_state=42, n_jobs=-1)

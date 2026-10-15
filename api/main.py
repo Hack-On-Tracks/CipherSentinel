@@ -121,7 +121,7 @@ def _build_entity_timelines():
                 "in_mb":     round(float(row.get("in_bytes", 0)) / 1e6, 3),
                 "conn_count": int(row.get("conn_count", 0)),
                 "primary_sni": str(row.get("primary_sni", "")),
-                "primary_category": str(row.get("primary_category", "")),
+                "primary_category": str(row.get("dest_category", "unknown")),
                 "has_exfil": int(row.get("has_exfil", 0)),
                 "scenario": str(row.get("scenarios", "")),
             }
@@ -151,9 +151,9 @@ def health():
 SCENARIO_USERS: dict[str, str] = {
     "S1": "U-000",
     "S2": "U-008",
-    "S3": "U-014",
+    "S3": "U-019",
     "S4": "U-009",
-    "S5": "U-021",
+    "S5": "U-024",
     "S6": "U-002",
     "ALL": "",
 }

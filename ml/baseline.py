@@ -29,6 +29,12 @@ def robust_z(value: float, history: np.ndarray) -> float:
     m   = K_MAD * mad(history)
     return (value - med) / (m + EPSILON)
 
+def ewma(values: np.ndarray, alpha: float = 0.2) -> float:
+    """Optional drift-aware baseline; never changes the robust default."""
+    if len(values) == 0:
+        return 0.0
+    return float(pd.Series(values).ewm(alpha=alpha, adjust=False).mean().iloc[-1])
+
 def compute_user_baselines(df: pd.DataFrame) -> dict:
     """
     For each user x hour_of_week bucket, store median and MAD of each numeric col.
@@ -88,11 +94,13 @@ def score_self(row: pd.Series, baselines: dict) -> float:
 
     # JSON serialises int keys as strings - try both
     hw_str = str(hw)
-    if hw_str not in user_bl:
-        # find the closest hour bucket
-        if user_bl:
-            candidates = sorted(user_bl.keys(), key=lambda h: abs(int(h) - hw))
-            hw_str = candidates[0]
+    # Sparse 15-minute observations often leave an exact weekly hour with
+    # fewer than three samples.  Use the nearest sufficiently populated
+    # bucket rather than treating an off-hours transfer as unscorable.
+    if (hw_str not in user_bl or any(user_bl[hw_str].get(c, {}).get("n", 0) < 3
+                                    for c in ["out_bytes", "out_in_ratio"])) and user_bl:
+        candidates = [h for h in user_bl if user_bl[h].get("out_bytes", {}).get("n", 0) >= 3]
+        hw_str = min(candidates or list(user_bl), key=lambda h: abs(int(h) - hw))
 
     z_scores = []
     for col in ["out_bytes", "out_in_ratio"]:
@@ -119,10 +127,10 @@ def score_peer(row: pd.Series, peer_baselines: dict) -> float:
     role_bl = peer_baselines.get(role, {})
 
     hw_str = str(hw)
-    if hw_str not in role_bl:
-        if role_bl:
-            candidates = sorted(role_bl.keys(), key=lambda h: abs(int(h) - hw))
-            hw_str = candidates[0]
+    if (hw_str not in role_bl or any(role_bl[hw_str].get(c, {}).get("n", 0) < 3
+                                    for c in ["out_bytes", "out_in_ratio"])) and role_bl:
+        candidates = [h for h in role_bl if role_bl[h].get("out_bytes", {}).get("n", 0) >= 3]
+        hw_str = min(candidates or list(role_bl), key=lambda h: abs(int(h) - hw))
 
     z_scores = []
     for col in ["out_bytes", "out_in_ratio"]:
@@ -139,17 +147,21 @@ def score_peer(row: pd.Series, peer_baselines: dict) -> float:
         return 0.0
     return float(np.clip(np.mean(z_scores), 0, 100))
 
-def build_and_save(feat_path=None, out_dir=None):
+def build_and_save(feat_path=None, out_dir=None, use_ewma: bool = False):
     if feat_path is None: feat_path = os.path.join(REPO, "data", "features_15m.csv")
     if out_dir is None: out_dir = os.path.join(REPO, "data")
     df = pd.read_csv(feat_path)
+    # Scenario rows are withheld: a detector must not learn its test attacks,
+    # legitimate controls, or hard-negative evaluation samples as history.
+    scenario_text = df.get("scenarios", pd.Series("[]", index=df.index)).fillna("[]").astype(str)
+    history = df[(df.get("has_exfil", 0).astype(int) == 0) & scenario_text.isin(["[]", ""])].copy()
     for col in NUMERIC_COLS:
         if col not in df.columns:
             df[col] = 0.0
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
-    user_bl = compute_user_baselines(df)
-    peer_bl = compute_peer_baselines(df)
+    user_bl = compute_user_baselines(history)
+    peer_bl = compute_peer_baselines(history)
 
     user_path = os.path.join(out_dir, "baselines_user.json")
     peer_path = os.path.join(out_dir, "baselines_peer.json")

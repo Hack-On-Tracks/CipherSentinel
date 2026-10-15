@@ -7,7 +7,7 @@ run_pipeline.py  -  One-shot script to generate data, compute features,
 Run from the repo root:
     python run_pipeline.py
 """
-import subprocess, sys, os
+import subprocess, sys, os, argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ML   = os.path.join(HERE, "ml")
@@ -24,7 +24,10 @@ def run(script, *args):
         sys.exit(result.returncode)
 
 if __name__ == "__main__":
-    run("generate.py",  "--out_dir", DATA)
+    parser = argparse.ArgumentParser(description="Build metadata-only CipherSentinel artefacts.")
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+    run("generate.py", "--seed", str(args.seed), "--out_dir", DATA)
     run("features.py")
     run("baseline.py")
     run("train.py")
