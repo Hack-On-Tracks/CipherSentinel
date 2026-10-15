@@ -1,0 +1,7 @@
+uid,label,scenario
+C10001,benign,normal_traffic
+C10002,exfiltration,personal_cloud_upload
+C10003,benign,build_push
+C10004,benign,api_sync
+C10005,exfiltration,file_drop
+C10006,benign,web_browsing

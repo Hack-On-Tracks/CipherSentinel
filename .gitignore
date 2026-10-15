@@ -11,6 +11,8 @@ data/*.csv
 data/*.json
 data/*.joblib
 data/*.parquet
+/data/external/
+/data/benchmark/
 
 # Frontend build
 web/dist/

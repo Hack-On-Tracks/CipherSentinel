@@ -263,6 +263,42 @@ def main(seed=SEED, out_dir="data"):
 
     users_df = pd.DataFrame(users)
     users_df.to_csv(os.path.join(out_dir, "users.csv"), index=False)
+
+    manifest_path = os.path.join(out_dir, "manifest.json")
+    import json
+    from datetime import datetime, timezone
+    manifest = {
+        "dataset_id": f"synthetic_seed_{seed}",
+        "source_type": "synthetic",
+        "provenance": "Synthetic Zeek-style flows (30 users, 5 roles, 30 days, S1-S6 scenarios)",
+        "license": "CC0-1.0 Public Domain (Generated Demo Telemetry)",
+        "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "metadata_only_verified": True,
+        "payload_inspection_performed": False,
+        "flow_count": len(df),
+        "entity_count": len(users),
+        "time_range": {"start": str(df["ts"].min()), "end": str(df["ts"].max())},
+        "label_availability": "synthetic_injected",
+        "scenario_ids": ["S1", "S2", "S3", "S4", "S5", "S6"],
+        "schema_mapping": {
+            "flow_id": "Synthetic flow identifier",
+            "ts": "Simulated connection timestamp",
+            "user_id": "Pseudonymous identity (U-000 to U-029)",
+            "role": "Department cohort (engineer, finance, design, hr, sales)",
+            "src_ip": "Simulated RFC 1918 internal IP",
+            "sni": "Destination domain",
+            "dest_category": "Policy category",
+            "out_bytes": "Egress bytes",
+            "in_bytes": "Ingress bytes",
+            "duration": "Connection duration in seconds",
+            "ja4": "Client TLS fingerprint",
+            "label": "benign | exfiltration",
+            "scenario": "S1-S6 or null"
+        }
+    }
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"[generate] Manifest -> {manifest_path}")
     return df
 
 if __name__ == "__main__":

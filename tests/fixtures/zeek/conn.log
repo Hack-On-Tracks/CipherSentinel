@@ -1,0 +1,15 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2026-03-01-09-00-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	local_orig	local_resp	missed_bytes	history	orig_pkts	orig_ip_bytes	resp_pkts	resp_ip_bytes	tunnel_parents
+#types	time	string	addr	port	addr	port	string	string	interval	count	count	string	bool	bool	count	string	count	count	count	count	set[string]
+1772355600.123456	C10001	192.0.2.10	54321	198.51.100.10	443	tcp	ssl	12.50	15420	450000	SF	T	F	0	ShADadfF	25	16800	320	465000	-
+1772355615.654321	C10002	192.0.2.10	54322	198.51.100.11	443	tcp	ssl	4.20	420000000	12000	SF	T	F	0	ShADadfF	31200	435000000	45	14500	-
+1772355900.111111	C10003	192.0.2.11	51234	203.0.113.50	443	tcp	ssl	120.00	1250000	890000	SF	T	F	0	ShADadfF	150	1310000	180	920000	-
+1772356500.222222	C10004	192.0.2.11	51235	203.0.113.51	443	tcp	ssl	3.10	8500	14200	SF	T	F	0	ShADadfF	12	9100	15	15000	-
+1772357000.333333	C10005	192.0.2.12	49800	198.51.100.80	443	tcp	ssl	45.60	45000000	35000	SF	T	F	0	ShADadfF	3200	46500000	90	39000	-
+1772358000.444444	C10006	192.0.2.10	54325	198.51.100.99	80	tcp	http	0.80	450	1200	SF	T	F	0	ShADadfF	5	650	6	1450	-
+#close	2026-03-01-10-00-00
