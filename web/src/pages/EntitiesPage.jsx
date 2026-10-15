@@ -1,219 +1,587 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { fetchEntities, fetchTimeline } from '../api.js'
-import { MOCK_ENTITIES } from '../mockData.js'
-import { formatBytes } from '../utils.js'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
-function EntityTimeline({ entityId, onClose }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['timeline', entityId],
-    queryFn: () => fetchTimeline(entityId),
-  })
+const ENTITIES_DATA = [
+  {
+    id: 'U-008',
+    name: 'U-008',
+    sub: 'finance',
+    type: 'User',
+    department: 'Finance',
+    risk: 87,
+    alertsCount: 5,
+    lastActivity: '2026-03-12 02:00',
+    status: 'High',
+    statusClass: 'status-high',
+    avatar: 'U',
+    isIcon: false,
+    avatarClass: 'avatar-user',
+    typeClass: 'pill-type-user',
+    topDests: [
+      { name: 'mega.nz', bytes: '400 MB', barClass: 'fill-red', width: '85%' },
+      { name: 'drive.google.com', bytes: '250 MB', barClass: 'fill-orange', width: '55%' },
+    ],
+  },
+  {
+    id: 'U-014',
+    name: 'U-014',
+    sub: 'hr',
+    type: 'User',
+    department: 'Human Resources',
+    risk: 55,
+    alertsCount: 3,
+    lastActivity: '2026-03-15 10:00',
+    status: 'Review',
+    statusClass: 'status-review',
+    avatar: 'U',
+    isIcon: false,
+    avatarClass: 'avatar-user',
+    typeClass: 'pill-type-user',
+    topDests: [
+      { name: 'wetransfer.com', bytes: '40 MB', barClass: 'fill-amber', width: '40%' },
+    ],
+  },
+  {
+    id: 'U-009',
+    name: 'U-009',
+    sub: 'finance',
+    type: 'User',
+    department: 'Finance',
+    risk: 74,
+    alertsCount: 4,
+    lastActivity: '2026-03-22 14:15',
+    status: 'High',
+    statusClass: 'status-high',
+    avatar: 'U',
+    isIcon: false,
+    avatarClass: 'avatar-user',
+    typeClass: 'pill-type-user',
+    topDests: [
+      { name: 'drive.google.com', bytes: '250 MB', barClass: 'fill-orange', width: '60%' },
+    ],
+  },
+  {
+    id: 'Laptop-01',
+    name: 'Laptop-01',
+    sub: 'Engineering',
+    type: 'Device',
+    department: 'Engineering',
+    risk: 32,
+    alertsCount: 1,
+    lastActivity: '2026-03-10 18:20',
+    status: 'Low',
+    statusClass: 'status-low',
+    avatar: 'laptop',
+    isIcon: true,
+    avatarClass: 'avatar-device',
+    typeClass: 'pill-type-device',
+    topDests: [
+      { name: 'github.com', bytes: '1.2 GB', barClass: 'fill-green', width: '70%' },
+    ],
+  },
+  {
+    id: 'EC2-Server',
+    name: 'EC2-Server',
+    sub: 'Prod Environment',
+    type: 'Device',
+    department: 'Production',
+    risk: 28,
+    alertsCount: 0,
+    lastActivity: '2026-03-09 11:45',
+    status: 'Low',
+    statusClass: 'status-low',
+    avatar: 'server',
+    isIcon: true,
+    avatarClass: 'avatar-device',
+    typeClass: 'pill-type-device',
+    topDests: [
+      { name: 'aws.amazon.com', bytes: '5.4 GB', barClass: 'fill-green', width: '80%' },
+    ],
+  },
+  {
+    id: 'mega.nz',
+    name: 'mega.nz',
+    sub: 'File Sharing',
+    type: 'Destination',
+    department: 'External Service',
+    risk: 67,
+    alertsCount: 6,
+    lastActivity: '2026-03-12 02:00',
+    status: 'High',
+    statusClass: 'status-high',
+    avatar: 'globe',
+    isIcon: true,
+    avatarClass: 'avatar-dest',
+    typeClass: 'pill-type-dest',
+    topDests: [
+      { name: 'U-008', bytes: '400 MB', barClass: 'fill-red', width: '80%' },
+    ],
+  },
+  {
+    id: 'wetransfer.com',
+    name: 'wetransfer.com',
+    sub: 'File Transfer',
+    type: 'Destination',
+    department: 'External Service',
+    risk: 48,
+    alertsCount: 3,
+    lastActivity: '2026-03-15 10:00',
+    status: 'Review',
+    statusClass: 'status-review',
+    avatar: 'globe',
+    isIcon: true,
+    avatarClass: 'avatar-dest',
+    typeClass: 'pill-type-dest',
+    topDests: [
+      { name: 'U-014', bytes: '40 MB', barClass: 'fill-amber', width: '35%' },
+    ],
+  },
+  {
+    id: 'drive.google.com',
+    name: 'drive.google.com',
+    sub: 'Cloud Storage',
+    type: 'Destination',
+    department: 'Authorized Storage',
+    risk: 72,
+    alertsCount: 5,
+    lastActivity: '2026-03-22 14:15',
+    status: 'High',
+    statusClass: 'status-high',
+    avatar: 'globe',
+    isIcon: true,
+    avatarClass: 'avatar-dest',
+    typeClass: 'pill-type-dest',
+    topDests: [
+      { name: 'U-009', bytes: '250 MB', barClass: 'fill-orange', width: '65%' },
+    ],
+  },
+]
 
-  const points = data?.timeline || []
-  const baselineMb = (data?.baseline_out_bytes || 0) / 1e6
-
-  // sample down to last 200 points for chart performance
-  const sample = points.length > 200 ? points.filter((_, i) => i % Math.ceil(points.length / 200) === 0) : points
-  const chartData = sample.map(p => ({
-    t:       p.window?.slice(5, 16) || '',
-    out_mb:  +(p.out_mb || 0).toFixed(2),
-    in_mb:   +(p.in_mb || 0).toFixed(2),
-    exfil:   p.has_exfil ? (p.out_mb || 0) : null,
-  }))
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 800 }} onClick={e => e.stopPropagation()}>
-        <div className="timeline-user-header">
-          <div className="user-avatar">{entityId.slice(-2)}</div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-0)', fontFamily: 'var(--font-mono)' }}>{entityId}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Outbound traffic timeline vs baseline</div>
-          </div>
-          <div style={{ marginLeft: 'auto' }}>
-            <button id={`btn-close-timeline-${entityId}`} className="btn btn-sm btn-secondary" onClick={onClose}>✕ Close</button>
-          </div>
-        </div>
-
-        <div style={{ padding: 24 }}>
-          {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-              <div className="spinner" />
-            </div>
-          ) : (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <div className="chart-legend">
-                  <div className="legend-item"><div className="legend-dot" style={{ background: 'var(--accent-blue)' }} />Outbound MB</div>
-                  <div className="legend-item"><div className="legend-dot" style={{ background: 'var(--accent-green)' }} />Inbound MB</div>
-                  <div className="legend-item"><div className="legend-dot" style={{ background: 'var(--risk-high)' }} />Exfiltration event</div>
-                  <div className="legend-item" style={{ marginLeft: 'auto' }}>
-                    <div style={{ width: 24, height: 2, background: 'var(--risk-review)', borderTop: '2px dashed var(--risk-review)' }} />
-                    Baseline median
-                  </div>
-                </div>
-              </div>
-
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="gradOut" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent-blue)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--accent-blue)" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent-green)" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="var(--accent-green)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(79,158,255,0.07)" />
-                  <XAxis dataKey="t" tick={{ fill: 'var(--text-3)', fontSize: 9 }} interval="preserveStartEnd" axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} unit=" MB" />
-                  <Tooltip
-                    contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border-medium)', borderRadius: 8, fontSize: 12 }}
-                    labelStyle={{ color: 'var(--text-0)' }}
-                    itemStyle={{ color: 'var(--text-1)' }}
-                  />
-                  {baselineMb > 0 && (
-                    <ReferenceLine y={baselineMb} stroke="var(--risk-review)" strokeDasharray="4 2" label={{ value: 'Baseline', fill: 'var(--risk-review)', fontSize: 9 }} />
-                  )}
-                  <Area type="monotone" dataKey="in_mb" name="Inbound" stroke="var(--accent-green)" fill="url(#gradIn)" strokeWidth={1.5} dot={false} />
-                  <Area type="monotone" dataKey="out_mb" name="Outbound" stroke="var(--accent-blue)" fill="url(#gradOut)" strokeWidth={2} dot={false} />
-                  <Area type="monotone" dataKey="exfil" name="Exfil event" stroke="var(--risk-high)" fill="var(--risk-high-glow)" strokeWidth={2} dot={{ r: 4, fill: 'var(--risk-high)' }} connectNulls={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 12, textAlign: 'center' }}>
-                Showing last {chartData.length} data points · 15-minute windows
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const ROLE_COLORS = {
-  engineer:  'var(--accent-blue)',
-  finance:   'var(--risk-review)',
-  hr:        'var(--accent-green)',
-  sales:     'var(--accent-purple)',
-  executive: 'var(--accent-cyan)',
-}
+const ACTIVITY_TREND_DATA = [
+  { date: 'Mar 1', gb: 0.8 },
+  { date: 'Mar 4', gb: 1.4 },
+  { date: 'Mar 8', gb: 2.3 },
+  { date: 'Mar 11', gb: 1.7 },
+  { date: 'Mar 15', gb: 1.1 },
+  { date: 'Mar 18', gb: 1.6 },
+  { date: 'Mar 22', gb: 2.6 },
+  { date: 'Mar 26', gb: 1.4 },
+  { date: 'Mar 30', gb: 1.7 },
+]
 
 export default function EntitiesPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['entities'],
-    queryFn: fetchEntities,
-    placeholderData: { entities: MOCK_ENTITIES },
+  const [selectedEntityId, setSelectedEntityId] = useState('U-008')
+  const [activeTab, setActiveTab] = useState('all') // 'all', 'users', 'devices', 'destinations'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [panelTab, setPanelTab] = useState('overview') // 'overview', 'activity', 'alerts', 'related'
+
+  const selectedEntity = ENTITIES_DATA.find(e => e.id === selectedEntityId) || ENTITIES_DATA[0]
+
+  const filteredEntities = ENTITIES_DATA.filter(e => {
+    if (activeTab === 'users' && e.type !== 'User') return false
+    if (activeTab === 'devices' && e.type !== 'Device') return false
+    if (activeTab === 'destinations' && e.type !== 'Destination') return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      return e.name.toLowerCase().includes(q) || e.sub.toLowerCase().includes(q)
+    }
+    return true
   })
 
-  const [selected, setSelected] = useState(null)
-  const [sortBy, setSortBy] = useState('max_risk')
-  const [roleFilter, setRoleFilter] = useState('All')
-
-  const entities = (data?.entities || MOCK_ENTITIES)
-    .filter(e => roleFilter === 'All' || e.role === roleFilter)
-    .sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0))
-
-  const roles = ['All', ...new Set(MOCK_ENTITIES.map(e => e.role))]
+  const renderAvatar = (entity) => {
+    if (!entity.isIcon) {
+      return <span className="entity-avatar-text">{entity.avatar}</span>
+    }
+    if (entity.avatar === 'laptop') {
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="18" height="12" x="3" y="4" rx="2" />
+          <line x1="2" y1="20" x2="22" y2="20" />
+        </svg>
+      )
+    }
+    if (entity.avatar === 'server') {
+      return (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+          <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+          <line x1="6" y1="6" x2="6.01" y2="6" />
+          <line x1="6" y1="18" x2="6.01" y2="18" />
+        </svg>
+      )
+    }
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="2" y1="12" x2="22" y2="12" />
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+      </svg>
+    )
+  }
 
   return (
-    <div>
-      <h1 className="page-title">👤 Entities</h1>
-      <p className="page-subtitle">
-        All monitored users with outbound volume and risk scores · click a row to view the traffic timeline
-      </p>
-
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <select id="filter-role-entities" className="scenario-select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-          {roles.map(r => <option key={r}>{r}</option>)}
-        </select>
-        <select id="sort-entities" className="scenario-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-          <option value="max_risk">Sort: Max Risk</option>
-          <option value="alert_count">Sort: Alert Count</option>
-          <option value="total_out_gb">Sort: Outbound GB</option>
-        </select>
+    <div className="entities-page-container">
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
+      <div className="entities-page-header">
+        <h1 className="entities-title">Entities</h1>
+        <p className="entities-subtitle">Monitor and analyse users, devices and destinations for potential insider threats.</p>
       </div>
 
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <div className="spinner" />
+      {/* ── 4 KPI Metric Cards ───────────────────────────────────────────── */}
+      <div className="entities-kpi-grid">
+        <div className="kpi-card" onClick={() => setActiveTab('all')}>
+          <div className="kpi-icon-box kpi-icon-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Total Entities</div>
+            <div className="kpi-value text-green">6</div>
+            <div className="kpi-sub">Monitored users</div>
+          </div>
         </div>
-      ) : (
-        <div className="table-wrap">
-          <table aria-label="Entities table">
-            <thead>
-              <tr>
-                <th>Entity</th>
-                <th>Role</th>
-                <th>Total Out</th>
-                <th>Alerts</th>
-                <th>Max Risk</th>
-                <th>Risk Bar</th>
-                <th>Timeline</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entities.map(e => {
-                const riskCol = e.max_risk >= 70 ? 'var(--risk-high)' : e.max_risk >= 40 ? 'var(--risk-review)' : 'var(--risk-info)'
-                return (
-                  <tr key={e.entity} onClick={() => setSelected(e.entity)} style={{ cursor: 'pointer' }}>
-                    <td className="td-mono td-bold">{e.entity}</td>
-                    <td>
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        background: 'var(--bg-2)',
-                        color: ROLE_COLORS[e.role] || 'var(--text-1)',
-                        fontSize: 11,
-                        fontWeight: 600,
-                      }}>{e.role}</span>
-                    </td>
-                    <td className="td-mono">{e.total_out_gb?.toFixed(2)} GB</td>
-                    <td>
-                      <span style={{ color: e.alert_count > 0 ? 'var(--risk-high)' : 'var(--text-2)', fontWeight: 700 }}>
-                        {e.alert_count}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="td-mono" style={{ color: riskCol, fontWeight: 700, fontSize: 15 }}>{e.max_risk}</span>
-                    </td>
-                    <td style={{ width: 100 }}>
-                      <div style={{ width: 80, height: 6, borderRadius: 99, background: 'var(--bg-3)', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${e.max_risk}%`,
-                          background: riskCol,
-                          borderRadius: 99,
-                          transition: 'width 0.5s',
-                        }} />
-                      </div>
-                    </td>
-                    <td>
-                      <button
-                        id={`btn-timeline-${e.entity}`}
-                        className="btn btn-sm btn-secondary"
-                        onClick={(ev) => { ev.stopPropagation(); setSelected(e.entity) }}
-                      >
-                        📈 View
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
-      {selected && <EntityTimeline entityId={selected} onClose={() => setSelected(null)} />}
+        <div className="kpi-card" onClick={() => setActiveTab('users')}>
+          <div className="kpi-icon-box kpi-icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect width="18" height="12" x="3" y="4" rx="2" />
+              <line x1="2" y1="20" x2="22" y2="20" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">User Entities</div>
+            <div className="kpi-value">4</div>
+            <div className="kpi-sub">Active users</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" onClick={() => setActiveTab('devices')}>
+          <div className="kpi-icon-box kpi-icon-purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6" />
+              <rect x="6" y="14" width="12" height="8" rx="1" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Device Entities</div>
+            <div className="kpi-value">2</div>
+            <div className="kpi-sub">Active devices</div>
+          </div>
+        </div>
+
+        <div className="kpi-card" onClick={() => setActiveTab('destinations')}>
+          <div className="kpi-icon-box kpi-icon-amber">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Destination Entities</div>
+            <div className="kpi-value">8</div>
+            <div className="kpi-sub">Unique domains</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Two-Column Layout ───────────────────────────────────────── */}
+      <div className="entities-content-grid">
+        {/* Left Column: Table & Filters */}
+        <div className="entities-left-panel">
+          {/* Filter Tabs & Search Bar Row */}
+          <div className="entities-filter-row">
+            <div className="entities-tabs">
+              <button
+                className={`entity-tab-btn ${activeTab === 'all' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab('all')}
+              >
+                All Entities
+              </button>
+              <button
+                className={`entity-tab-btn ${activeTab === 'users' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab('users')}
+              >
+                Users
+              </button>
+              <button
+                className={`entity-tab-btn ${activeTab === 'devices' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab('devices')}
+              >
+                Devices
+              </button>
+              <button
+                className={`entity-tab-btn ${activeTab === 'destinations' ? 'tab-active' : ''}`}
+                onClick={() => setActiveTab('destinations')}
+              >
+                Destinations
+              </button>
+            </div>
+
+            <div className="entities-controls">
+              <div className="entities-search-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by name, type, domain..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="select-pill">
+                <span>⇅ Risk Score</span>
+                <span className="select-chevron">⌵</span>
+              </div>
+
+              <div className="select-pill">
+                <span>🗂️ All Types</span>
+                <span className="select-chevron">⌵</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Entities Table */}
+          <div className="entities-table-card">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>ENTITY</th>
+                  <th>TYPE</th>
+                  <th>RISK SCORE ↕</th>
+                  <th>ALERTS ↕</th>
+                  <th>LAST ACTIVITY ↕</th>
+                  <th>STATUS ↕</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEntities.map(e => {
+                  const isSelected = selectedEntityId === e.id
+                  const riskColor = e.risk >= 70 ? 'text-red' : e.risk >= 40 ? 'text-amber' : 'text-green'
+
+                  return (
+                    <tr
+                      key={e.id}
+                      className={isSelected ? 'row-selected' : ''}
+                      onClick={() => setSelectedEntityId(e.id)}
+                    >
+                      <td>
+                        <div className="entity-cell">
+                          <div className={`entity-avatar-circle ${e.avatarClass}`}>
+                            {renderAvatar(e)}
+                          </div>
+                          <div>
+                            <div className="entity-primary-name">{e.name}</div>
+                            <div className="entity-sub-name">{e.sub}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`entity-type-badge ${e.typeClass}`}>
+                          {e.type === 'User' ? '👤 ' : e.type === 'Device' ? '💻 ' : '🌐 '}
+                          {e.type}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`table-risk-val ${riskColor}`}>{e.risk}</span>
+                      </td>
+                      <td>
+                        <span className="table-alerts-count">{e.alertsCount}</span>
+                      </td>
+                      <td>
+                        <span className="table-meta-text">{e.lastActivity}</span>
+                      </td>
+                      <td>
+                        <span className={`table-status-pill ${e.statusClass}`}>
+                          ● {e.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="table-more-btn" type="button" onClick={ev => ev.stopPropagation()}>
+                          ···
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right Column: Entity Profile Sidebar Panel */}
+        <div className="entity-detail-panel">
+          <div className="detail-panel-header">
+            <div className="detail-header-left">
+              <div className="detail-avatar-circle">
+                {selectedEntity.name.slice(0, 1)}
+              </div>
+              <div>
+                <div className="detail-entity-name">{selectedEntity.name}</div>
+                <div className="detail-entity-sub">{selectedEntity.sub}</div>
+              </div>
+            </div>
+            <span className="detail-high-badge">
+              {selectedEntity.status} Risk
+            </span>
+          </div>
+
+          {/* Panel Navigation Tabs */}
+          <div className="detail-tabs">
+            <button
+              className={`detail-tab-btn ${panelTab === 'overview' ? 'tab-active' : ''}`}
+              onClick={() => setPanelTab('overview')}
+            >
+              Overview
+            </button>
+            <button
+              className={`detail-tab-btn ${panelTab === 'activity' ? 'tab-active' : ''}`}
+              onClick={() => setPanelTab('activity')}
+            >
+              Activity
+            </button>
+            <button
+              className={`detail-tab-btn ${panelTab === 'alerts' ? 'tab-active' : ''}`}
+              onClick={() => setPanelTab('alerts')}
+            >
+              Alerts ({selectedEntity.alertsCount})
+            </button>
+            <button
+              className={`detail-tab-btn ${panelTab === 'related' ? 'tab-active' : ''}`}
+              onClick={() => setPanelTab('related')}
+            >
+              Related Entities
+            </button>
+          </div>
+
+          {/* Metadata Information List */}
+          <div className="detail-info-list">
+            <div className="detail-info-row">
+              <span className="info-row-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                Type
+              </span>
+              <span className="info-row-value">{selectedEntity.type}</span>
+            </div>
+
+            <div className="detail-info-row">
+              <span className="info-row-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect width="18" height="18" x="3" y="4" rx="2" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                Department
+              </span>
+              <span className="info-row-value">{selectedEntity.department}</span>
+            </div>
+
+            <div className="detail-info-row">
+              <span className="info-row-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="22" y1="12" x2="18" y2="12" />
+                  <line x1="6" y1="12" x2="2" y2="12" />
+                </svg>
+                Risk Score
+              </span>
+              <span className="info-row-value text-red">{selectedEntity.risk}</span>
+            </div>
+
+            <div className="detail-info-row">
+              <span className="info-row-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+                Total Alerts
+              </span>
+              <span className="info-row-value">{selectedEntity.alertsCount}</span>
+            </div>
+
+            <div className="detail-info-row">
+              <span className="info-row-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Last Activity
+              </span>
+              <span className="info-row-value">{selectedEntity.lastActivity}</span>
+            </div>
+          </div>
+
+          {/* Activity Trend Chart */}
+          <div className="detail-chart-section">
+            <div className="detail-chart-header">
+              <span className="detail-chart-title">Activity Trend (Last 30 days)</span>
+              <div className="select-pill" style={{ padding: '2px 8px', fontSize: 11 }}>
+                <span>Bytes Out</span>
+                <span className="select-chevron">⌵</span>
+              </div>
+            </div>
+
+            <div style={{ height: 115, marginTop: 10 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={ACTIVITY_TREND_DATA} margin={{ top: 8, right: 6, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="entityTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{ fill: '#8C9B92', fontSize: 10 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis domain={[0, 3]} ticks={[0, 1, 2, 3]} tick={{ fill: '#8C9B92', fontSize: 10 }} tickFormatter={v => (v === 0 ? '0' : `${v} GB`)} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => [`${v} GB`, 'Outbound']} contentStyle={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 11 }} />
+                  <Area type="monotone" dataKey="gb" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#entityTrendGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Top Destinations */}
+          <div className="detail-dest-section">
+            <div className="detail-dest-header">
+              <span className="detail-dest-title">Top Destinations</span>
+              <button className="dest-view-all-btn" type="button">
+                View all →
+              </button>
+            </div>
+
+            <div className="detail-dest-list">
+              {selectedEntity.topDests.map(d => (
+                <div key={d.name} className="dest-item-row">
+                  <div className="dest-item-left">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                    <span className="dest-item-name">{d.name}</span>
+                  </div>
+                  <div className="dest-item-right">
+                    <div className="dest-bar-track">
+                      <div className={`dest-bar-fill ${d.barClass}`} style={{ width: d.width }} />
+                    </div>
+                    <span className="dest-item-bytes">{d.bytes}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
