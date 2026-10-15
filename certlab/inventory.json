@@ -28,9 +28,8 @@
       "issuing_ca_sha256": "1ed1883a07938d622e5dad6e8afb92cdd6824f2d7c4ec5dda982802d01ae4f70",
       "not_before": "Oct 15 10:35:16 2026 GMT",
       "not_after": "Oct 15 10:35:16 2027 GMT",
-      "enrollment_status": "certificate-issued-install-pending",
-      "lifecycle_status": "active",
-      "issuing_ca_sha256": "1ed1883a07938d622e5dad6e8afb92cdd6824f2d7c4ec5dda982802d01ae4f70"
+      "enrollment_status": "certificate-verified-install-pending",
+      "lifecycle_status": "active"
     },
     {
       "device_id": "ORG-A-DEVICE-002",
