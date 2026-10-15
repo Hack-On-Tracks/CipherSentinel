@@ -162,21 +162,28 @@ def build_and_save(
     df = df.sort_values("window").reset_index(drop=True)
 
     # Apply chronological split to prevent leakage
-    if train_until is not None:
+    if "evaluation_split" in df.columns:
+        split_df = df[df["evaluation_split"].astype(str) == "train"].copy()
+        if split_df.empty:
+            raise ValueError("No feature windows are marked evaluation_split=train.")
+    elif train_until is not None:
         cutoff = pd.to_datetime(train_until, utc=True)
         split_df = df[df["window"] <= cutoff].copy()
     elif train_split is not None and 0.0 < train_split < 1.0:
-        split_idx = int(len(df) * train_split)
-        split_df = df.iloc[:split_idx].copy()
+        windows = pd.Index(df["window"].drop_duplicates().sort_values())
+        split_idx = min(max(int(len(windows) * train_split), 1), len(windows) - 1)
+        cutoff = windows[split_idx - 1]
+        split_df = df[df["window"] <= cutoff].copy()
     else:
         split_df = df.copy()
 
     # Filter out attack and scenario windows from baseline history
-    scenario_text = split_df.get("scenarios", pd.Series("[]", index=split_df.index)).fillna("[]").astype(str)
     has_labels = int(split_df.get("labeled", 1).iloc[0]) if "labeled" in split_df.columns else 1
 
     if has_labels:
-        history = split_df[(split_df.get("has_exfil", 0).astype(int) == 0) & scenario_text.isin(["[]", ""])].copy()
+        # Ground-truth benign controls may carry a scenario tag (for example,
+        # normal_traffic); labels, not scenario-name emptiness, define safety.
+        history = split_df[split_df.get("has_exfil", 0).astype(int) == 0].copy()
     else:
         # Unlabeled data
         if not assume_benign_history:
@@ -184,7 +191,7 @@ def build_and_save(
         history = split_df.copy()
 
     if history.empty:
-        history = split_df.copy()
+        raise ValueError("No benign training windows available for baselines; refusing to fit on attack data.")
 
     for col in NUMERIC_COLS:
         if col not in history.columns:

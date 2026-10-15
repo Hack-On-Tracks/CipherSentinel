@@ -20,10 +20,13 @@ from pydantic import BaseModel, ConfigDict, Field
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "ml"))
-from api.config import MODEL_PATH, REPLAY_INTERVAL_SEC, SCALER_PATH  # noqa: E402
+from api.config import REPLAY_INTERVAL_SEC  # noqa: E402
 from ml.generate import SCENARIO_USERS  # noqa: E402
 
-DATA_DIR = BASE_DIR / "data"
+_data_dir_setting = Path(os.getenv("CIPHERSENTINEL_DATA_DIR", "data"))
+DATA_DIR = (_data_dir_setting if _data_dir_setting.is_absolute() else BASE_DIR / _data_dir_setting).resolve()
+MODEL_PATH = Path(os.getenv("CIPHERSENTINEL_MODEL_PATH", str(DATA_DIR / "model.joblib"))).expanduser().resolve()
+SCALER_PATH = Path(os.getenv("CIPHERSENTINEL_SCALER_PATH", str(DATA_DIR / "scaler.joblib"))).expanduser().resolve()
 CERT_INVENTORY_PATH = BASE_DIR / "certlab" / "inventory.json"
 SCENARIOS = [
     {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
@@ -65,12 +68,12 @@ def load_artifacts() -> None:
     try:
         required = [DATA_DIR / "alerts.json", DATA_DIR / "features_15m.csv",
                     DATA_DIR / "baselines_user.json", DATA_DIR / "baselines_peer.json",
-                    BASE_DIR / MODEL_PATH, BASE_DIR / SCALER_PATH]
-        missing = [str(path.relative_to(BASE_DIR)) for path in required if not path.is_file()]
+                    MODEL_PATH, SCALER_PATH]
+        missing = [str(path) for path in required if not path.is_file()]
         if missing:
             raise FileNotFoundError(
                 "Missing prepared artifacts: " + ", ".join(missing)
-                + ". Run `python run_pipeline.py` from the repository root to prepare them."
+                + ". Run the appropriate data pipeline from the repository root to prepare them."
             )
         alerts = _read_json(DATA_DIR / "alerts.json", [])
         if not isinstance(alerts, list) or any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in alerts):
@@ -80,7 +83,7 @@ def load_artifacts() -> None:
         user_bl = _read_json(DATA_DIR / "baselines_user.json", {})
         peer_bl = _read_json(DATA_DIR / "baselines_peer.json", {})
         evaluation = _read_json(DATA_DIR / "evaluation.json", {})
-        model_path, scaler_path = BASE_DIR / MODEL_PATH, BASE_DIR / SCALER_PATH
+        model_path, scaler_path = MODEL_PATH, SCALER_PATH
         model = joblib.load(model_path) if model_path.exists() else None
         scaler = joblib.load(scaler_path) if scaler_path.exists() else None
         timelines: dict[str, list[dict[str, Any]]] = {}

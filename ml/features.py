@@ -36,7 +36,7 @@ def build_windows(flows: pd.DataFrame, freq: str, label: str) -> pd.DataFrame:
     flows["is_exfil_flow"] = (flows["label"].astype(str).str.lower() == "exfiltration").astype(int) if "label" in flows.columns else 0
     flows["is_labeled_flow"] = (flows["label"].astype(str).str.lower().isin(["exfiltration", "benign"])).astype(int) if "label" in flows.columns else 0
 
-    flows["window"] = pd.to_datetime(flows["ts"], utc=True).dt.floor(freq)
+    flows["window"] = pd.to_datetime(flows["ts"], utc=True, format="mixed").dt.floor(freq)
     base = flows.groupby(["user_id", "role", "window"], sort=True)
     numeric = base.agg(
         out_bytes=("out_bytes", "sum"),
@@ -47,6 +47,14 @@ def build_windows(flows: pd.DataFrame, freq: str, label: str) -> pd.DataFrame:
         has_exfil=("is_exfil_flow", lambda x: int(x.any())),
         labeled=("is_labeled_flow", lambda x: int(x.any())),
     ).reset_index()
+    if "evaluation_split" in flows.columns:
+        split_values = base["evaluation_split"].agg(
+            lambda values: values.iloc[0] if values.nunique(dropna=False) == 1 else "mixed"
+        ).reset_index(name="evaluation_split")
+        # A coarser aggregation (for example a daily window) can span the
+        # training cutoff. Mark it mixed so neither fit nor test accidentally
+        # consumes data from both sides of the boundary.
+        numeric = numeric.merge(split_values, on=["user_id", "role", "window"], validate="one_to_one")
 
     if not has_labels_col:
         # Explicit indicator for evaluation that ground truth was not present

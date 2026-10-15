@@ -69,21 +69,27 @@ def method_A(row: pd.Series) -> bool:
     return float(row.get("out_bytes", 0)) > THRESHOLD_MB * 1e6
 
 
-def method_B_scores(df: pd.DataFrame) -> np.ndarray:
+def method_B_scores(train_df: pd.DataFrame, eval_df: pd.DataFrame):
     raw_cols = [
         "out_bytes", "in_bytes", "out_in_ratio", "conn_count", "max_duration",
         "hour_of_week", "new_dest_user", "new_dest_org", "ja4_rare"
     ]
+    train_df = train_df.copy()
+    eval_df = eval_df.copy()
     for c in raw_cols:
-        if c not in df.columns:
-            df[c] = 0.0
-    X = df[raw_cols].fillna(0.0).values.astype(float)
+        if c not in train_df.columns:
+            train_df[c] = 0.0
+        if c not in eval_df.columns:
+            eval_df[c] = 0.0
+    X_train = train_df[raw_cols].fillna(0.0).values.astype(float)
+    X_eval = eval_df[raw_cols].fillna(0.0).values.astype(float)
     scaler_b = RobustScaler()
-    X_s = scaler_b.fit_transform(X)
+    X_train_s = scaler_b.fit_transform(X_train)
+    X_eval_s = scaler_b.transform(X_eval)
     iso_b = IsolationForest(contamination=0.05, random_state=42, n_jobs=-1)
-    iso_b.fit(X_s)
-    raw = iso_b.decision_function(X_s)
-    return (raw < -0.1).astype(int), -raw
+    iso_b.fit(X_train_s)
+    raw = iso_b.decision_function(X_eval_s)
+    return (raw < 0).astype(int), -raw
 
 
 def method_C(row: pd.Series, user_bl: dict, peer_bl: dict) -> bool:
@@ -93,10 +99,10 @@ def method_C(row: pd.Series, user_bl: dict, peer_bl: dict) -> bool:
 
 
 def method_D(row: pd.Series, model, scaler, user_bl: dict, peer_bl: dict) -> Tuple[bool, int]:
-    alert = score_window(row, model, scaler, user_bl, peer_bl)
-    if alert is not None and alert["risk"] >= 40:
-        return True, alert["risk"]
-    return False, 0
+    alert = score_window(row, model, scaler, user_bl, peer_bl, include_info=True)
+    if alert is None:
+        return False, 0
+    return alert["risk"] >= 40, alert["risk"]
 
 
 def compute_metrics(pred: np.ndarray, truth: np.ndarray, raw_scores: Optional[np.ndarray] = None):
@@ -163,11 +169,18 @@ def run(data_dir=None, out_path=None, test_from=None):
     df = df.sort_values("window_dt").reset_index(drop=True)
 
     # Optional test period filter
-    if test_from is not None:
+    if "evaluation_split" in df.columns:
+        train_df = df[df["evaluation_split"].astype(str) == "train"].copy()
+        eval_df = df[df["evaluation_split"].astype(str) == "test"].copy()
+        if train_df.empty or eval_df.empty:
+            raise ValueError("Preassigned evaluation split must contain both train and test windows.")
+    elif test_from is not None:
         test_dt = pd.to_datetime(test_from, utc=True)
         eval_df = df[df["window_dt"] >= test_dt].copy()
+        train_df = df[df["window_dt"] < test_dt].copy()
     else:
         eval_df = df.copy()
+        train_df = df.copy()
 
     # Check whether ground-truth labels are available
     has_labels = True
@@ -182,7 +195,7 @@ def run(data_dir=None, out_path=None, test_from=None):
     pred_A = eval_df.apply(method_A, axis=1).astype(int).values
     score_A = eval_df.get("out_bytes", pd.Series(0, index=eval_df.index)).fillna(0).values.astype(float)
 
-    pred_B, score_B = method_B_scores(eval_df)
+    pred_B, score_B = method_B_scores(train_df, eval_df)
     pred_C = eval_df.apply(lambda r: int(method_C(r, user_bl, peer_bl)), axis=1).values
     score_C = eval_df.apply(lambda r: max(score_self(r, user_bl), score_peer(r, peer_bl)), axis=1).values
 
@@ -240,7 +253,10 @@ def run(data_dir=None, out_path=None, test_from=None):
     output = {
         "generated_at": pd.Timestamp.now(tz="UTC").isoformat(),
         "evaluation_status": "evaluated",
-        "caveat": "Synthetic/injected scenarios demonstrate detector coherence and trade-offs under MITRE ATT&CK T1567.",
+        "caveat": manifest.get(
+            "evaluation_caveat",
+            "Synthetic/injected scenarios demonstrate detector coherence and trade-offs under MITRE ATT&CK T1567.",
+        ),
         "methods": {
             "A_threshold": "Fixed 100 MB/window threshold",
             "B_iso_raw": "Isolation Forest on raw flow features, no baselines",
@@ -252,6 +268,7 @@ def run(data_dir=None, out_path=None, test_from=None):
             "entity_count": n_users,
             "days": n_days,
             "test_from": test_from,
+            "split": "preassigned train/test" if "evaluation_split" in df.columns else "timestamp" if test_from else "all rows",
         },
         "results": results,
         "manifest": manifest,

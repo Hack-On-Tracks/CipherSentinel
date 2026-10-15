@@ -87,6 +87,7 @@ def score_window(
     peer_bl: dict,
     allow_trusted_build: bool = True,
     sixth_signal_fn: callable | None = None,
+    include_info: bool = False,
 ):
     """
     Score one 15-minute entity window against the five signals.
@@ -137,7 +138,7 @@ def score_window(
 
     risk = int(round(np.clip(total, 0, 100)))
     severity = _severity(risk)
-    if severity == "info":
+    if severity == "info" and not include_info:
         return None
 
     median_mb = _baseline_out(row, user_bl) / 1e6
@@ -204,6 +205,8 @@ def score_all(
     scaler_path=None,
     out_path=None,
     data_dir=None,
+    evaluation_split: str | None = None,
+    test_from: str | None = None,
 ):
     base_data = data_dir or os.path.join(REPO, "data")
     feat_path = feat_path or os.path.join(base_data, "features_15m.csv")
@@ -214,6 +217,11 @@ def score_all(
     out_path = out_path or os.path.join(base_data, "alerts.json")
 
     df = pd.read_csv(feat_path)
+    if evaluation_split is not None and "evaluation_split" in df.columns:
+        df = df[df["evaluation_split"].astype(str) == evaluation_split].copy()
+    elif test_from is not None:
+        df["window_dt"] = pd.to_datetime(df["window"], utc=True)
+        df = df[df["window_dt"] >= pd.to_datetime(test_from, utc=True)].copy()
     with open(user_bl_path) as f:
         user_bl = json.load(f)
     with open(peer_bl_path) as f:
@@ -243,12 +251,17 @@ def main():
     parser.add_argument("--features", default=None, help="Path to features_15m.csv")
     parser.add_argument("--data-dir", default=None, help="Data directory with baselines and model")
     parser.add_argument("--out-path", default=None, help="Path to write alerts.json")
+    parser.add_argument("--evaluation-split", choices=["train", "test"], default=None,
+                        help="Optionally score only one preassigned split")
+    parser.add_argument("--test-from", default=None, help="Optionally score only windows at or after this ISO timestamp")
     args = parser.parse_args()
 
     score_all(
         feat_path=args.features,
         data_dir=args.data_dir,
         out_path=args.out_path,
+        evaluation_split=args.evaluation_split,
+        test_from=args.test_from,
     )
 
 

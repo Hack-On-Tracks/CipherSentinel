@@ -15,6 +15,7 @@ import argparse
 import os
 import subprocess
 import sys
+import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ML = os.path.join(HERE, "ml")
@@ -30,6 +31,20 @@ def run_script(script, *args):
     if result.returncode != 0:
         print(f"[ERROR] {script} failed with exit code {result.returncode}")
         sys.exit(result.returncode)
+
+
+def first_test_window(features_path, train_split=None, train_until=None):
+    """Return the first held-out timestamp, matching the training split logic."""
+    frame = pd.read_csv(features_path, usecols=["window"])
+    windows = pd.Index(pd.to_datetime(frame["window"], utc=True).drop_duplicates().sort_values())
+    if train_until:
+        candidates = windows[windows > pd.to_datetime(train_until, utc=True)]
+    elif train_split is not None and 0.0 < train_split < 1.0:
+        split_idx = min(max(int(len(windows) * train_split), 1), len(windows) - 1)
+        candidates = windows[split_idx:]
+    else:
+        return None
+    return candidates[0].isoformat() if len(candidates) else None
 
 
 def main():
@@ -76,8 +91,14 @@ def main():
         run_script("features.py", "--flows", os.path.join(out_dir, "flows.csv"), "--out-dir", out_dir)
         run_script("baseline.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--out-dir", out_dir)
         run_script("train.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--user-bl", os.path.join(out_dir, "baselines_user.json"), "--out-dir", out_dir)
-        run_script("score.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--data-dir", out_dir)
-        run_script("evaluate.py", "--data-dir", out_dir)
+        test_start = first_test_window(os.path.join(out_dir, "features_15m.csv"), args.train_split, args.train_until)
+        score_args = ["--features", os.path.join(out_dir, "features_15m.csv"), "--data-dir", out_dir]
+        evaluate_args = ["--data-dir", out_dir]
+        if test_start:
+            score_args += ["--test-from", test_start]
+            evaluate_args += ["--test-from", test_start]
+        run_script("score.py", *score_args)
+        run_script("evaluate.py", *evaluate_args)
         print(f"\n✅  Synthetic demo pipeline complete — artifacts ready in {out_dir}/")
 
     elif args.mode == "real":
@@ -125,8 +146,14 @@ def main():
             train_args.append("--assume-benign-history")
         run_script("train.py", *train_args)
 
-        run_script("score.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--data-dir", out_dir)
-        run_script("evaluate.py", "--data-dir", out_dir)
+        test_start = first_test_window(os.path.join(out_dir, "features_15m.csv"), args.train_split, args.train_until)
+        score_args = ["--features", os.path.join(out_dir, "features_15m.csv"), "--data-dir", out_dir]
+        evaluate_args = ["--data-dir", out_dir]
+        if test_start:
+            score_args += ["--test-from", test_start]
+            evaluate_args += ["--test-from", test_start]
+        run_script("score.py", *score_args)
+        run_script("evaluate.py", *evaluate_args)
         print(f"\n✅  Real-data pipeline complete — artifacts ready in {out_dir}/")
 
     elif args.mode == "csv":

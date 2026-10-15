@@ -82,6 +82,36 @@ Recommended publicly licensed datasets for metadata exfiltration benchmarking:
    - Contains labelled benign traffic and web attack/data theft flows.
    - Use the `GeneratedLabelledFlows` CSV files.
 
+### UWF-ZeekData24 exfiltration benchmark
+
+The repository includes `ml/run_uwf_exfil_benchmark.py` for the publicly hosted UWF-ZeekData24 CSV subset. It uses the benign connection records and the separate `Exfiltration` (T1048) records, creates a chronological train/test split within benign data, and holds every labeled exfiltration record out of training. The dataset is Zeek-derived cyber-range traffic, not production enterprise telemetry. Its public CSV subset contains only 23 exfiltration records, has no SNI/JA4 values in these tables, and should be treated as a small benchmark rather than a performance guarantee.
+
+The dataset page states that the data are shared under CC BY. Cite UWF-ZeekData24 as described on the [UWF dataset page](https://datasets.uwf.edu/) and in the [dataset paper](https://doi.org/10.3390/data10050059). The source CSVs should be kept under the ignored `data/external/` directory. Download the public files with:
+
+```bash
+mkdir -p data/external/uwf_zeekdata24
+curl -L --fail -o data/external/uwf_zeekdata24/benign.csv \
+  https://datasets.uwf.edu/data/UWF-ZeekData24/csv/Benign/part-00000-b039213f-1208-4f1b-b71d-5e8e3a4a2939-c000.csv
+curl -L --fail -o data/external/uwf_zeekdata24/exfiltration.csv \
+  https://datasets.uwf.edu/data/UWF-ZeekData24/csv/Exfiltration/part-00000-6a530c25-0f6b-46a1-ba16-c6b658ef75e8-c000.csv
+```
+
+Then run the benchmark:
+
+```bash
+.venv/bin/python ml/run_uwf_exfil_benchmark.py
+```
+
+Outputs are written to the ignored `data/benchmark/uwf_zeekdata24/` directory. The manifest records the source, split cutoff, row counts, and limits. The scorer and evaluator use the preassigned test windows only; the raw Isolation Forest comparison is fitted on the training windows rather than the test set.
+
+To view the held-out benchmark alerts in the local dashboard without replacing the default demo artifacts, start the backend with the benchmark artifact directory:
+
+```bash
+CIPHERSENTINEL_DATA_DIR=data/benchmark/uwf_zeekdata24 .venv/bin/uvicorn api.main:app --reload
+```
+
+Then start the frontend as usual. Without this environment variable, the API continues to load the default `data/` artifacts.
+
 *Policy notice: Do not commit large (>50 MB) raw datasets or sensitive enterprise PCAPs to this repository.*
 
 ---
