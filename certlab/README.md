@@ -75,10 +75,11 @@ python3 certlab/enroll.py sign --org ORG-A --device-id ORG-A-DEVICE-002 --csr ce
 ```
 
 Return the signed `.crt` and the matching public CA `.crt` to the owner. On
-the device, place them in the ignored `certlab/issued/` directory and run:
+the device, place both public certificates in the ignored `certlab/issued/`
+directory and run:
 
 ```sh
-python3 certlab/enroll.py verify --org ORG-A --device-id ORG-A-DEVICE-002 --cert certlab/issued/ORG-A-DEVICE-002.crt --key certlab/requests/ORG-A-DEVICE-002.key
+python3 certlab/enroll.py verify --org ORG-A --device-id ORG-A-DEVICE-002 --cert certlab/issued/ORG-A-DEVICE-002.crt --key certlab/requests/ORG-A-DEVICE-002.key --ca-cert certlab/issued/ORG-A-CA.crt
 ```
 
 This checks CA chain, client-auth EKU, validity, subject device ID, key match,

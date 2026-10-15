@@ -193,7 +193,10 @@ def verify(args: argparse.Namespace) -> None:
     if device["organization_id"] != args.org:
         raise EnrollmentError("Device organization mapping does not match the selected CA")
     cert, private_key = Path(args.cert).resolve(), Path(args.key).resolve()
-    key, ca_cert = org_paths(args.org)
+    _, default_ca_cert = org_paths(args.org)
+    ca_cert = Path(args.ca_cert).resolve() if args.ca_cert else ISSUED / f"{ORG_CA[args.org]}.crt"
+    if not ca_cert.is_file():
+        ca_cert = default_ca_cert
     if not cert.is_file() or not private_key.is_file() or not ca_cert.is_file():
         raise EnrollmentError("Certificate, device-local key, and public CA certificate are all required")
     run(["openssl", "verify", "-purpose", "sslclient", "-CAfile", str(ca_cert), str(cert)])
@@ -272,6 +275,7 @@ def main() -> int:
     p.add_argument("--device-id", required=True)
     p.add_argument("--cert", required=True)
     p.add_argument("--key", required=True)
+    p.add_argument("--ca-cert", help="Path to the public issuing CA certificate")
     p.set_defaults(func=verify)
     p = sub.add_parser("mark-installed", help="Record owner-confirmed OS certificate import")
     p.add_argument("--device-id", required=True)
