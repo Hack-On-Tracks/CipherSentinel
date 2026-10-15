@@ -1,232 +1,353 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchCompare } from '../api.js'
-import { MOCK_COMPARE } from '../mockData.js'
+import { useState } from 'react'
 import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 
-const METHODS_META = {
-  A_threshold:      { label: 'A · Threshold',      short: 'A',  color: '#ff4757' },
-  B_iso_raw:        { label: 'B · Raw IF',          short: 'B',  color: '#ffa502' },
-  C_baselines_only: { label: 'C · Baselines Only',  short: 'C',  color: '#4f9eff' },
-  D_full_fusion:    { label: 'D · CipherSentinel',  short: 'D',  color: '#22d3a5' },
-}
+const PERFORMANCE_DATA = [
+  { name: 'A - Threshold', precision: 33.3, recall: 40.0, f1: 36.4 },
+  { name: 'B - Raw IF', precision: 33.3, recall: 60.0, f1: 42.9 },
+  { name: 'C - Baselines Only', precision: 66.7, recall: 80.0, f1: 72.7 },
+  { name: 'D - CipherSentinel', precision: 83.3, recall: 100.0, f1: 90.9 },
+]
 
-function bestValue(results, metric, higherIsBetter = true) {
-  let best = null, bestKey = null
-  for (const [key, val] of Object.entries(results)) {
-    const v = val[metric]
-    if (v == null) continue
-    if (best == null || (higherIsBetter ? v > best : v < best)) {
-      best = v; bestKey = key
-    }
-  }
-  return bestKey
-}
+const DAYS_TO_ALERT_DATA = [
+  { name: 'A - Threshold', s3: 0, s3Missed: true, s5: 12 },
+  { name: 'B - Raw IF', s3: 20, s3Missed: false, s5: 8 },
+  { name: 'C - Baselines Only', s3: 10, s3Missed: false, s5: 5 },
+  { name: 'D - CipherSentinel', s3: 5, s3Missed: false, s5: 3 },
+]
+
+const DETAILED_METRICS_DATA = [
+  {
+    method: 'A - Threshold',
+    dotColor: '#EF4444',
+    tp: 2,
+    fp: 4,
+    fn: 3,
+    tn: 900,
+    precision: '33.3%',
+    precColor: 'text-red',
+    recall: '40.0%',
+    f1: '36.4%',
+    faUserWk: '0.44',
+    daysS3: 'X Missed',
+    s3Color: 'text-red',
+    daysS5: '12',
+  },
+  {
+    method: 'B - Raw IF',
+    dotColor: '#F59E0B',
+    tp: 3,
+    fp: 6,
+    fn: 2,
+    tn: 898,
+    precision: '33.3%',
+    precColor: 'text-red',
+    recall: '60.0%',
+    f1: '42.9%',
+    faUserWk: '0.67',
+    daysS3: '20',
+    s3Color: '',
+    daysS5: '8',
+  },
+  {
+    method: 'C - Baselines Only',
+    dotColor: '#3B82F6',
+    tp: 4,
+    fp: 2,
+    fn: 1,
+    tn: 902,
+    precision: '66.7%',
+    precColor: 'text-coral',
+    recall: '80.0%',
+    f1: '72.7%',
+    faUserWk: '0.22',
+    daysS3: '10',
+    s3Color: '',
+    daysS5: '5',
+  },
+  {
+    method: 'D - CipherSentinel',
+    dotColor: '#10B981',
+    tp: 5,
+    fp: 1,
+    fn: 0,
+    tn: 903,
+    precision: '83.3%',
+    precColor: 'text-green',
+    recall: '100.0%',
+    recColor: 'text-green',
+    f1: '90.9%',
+    f1Color: 'text-green',
+    faUserWk: '0.11',
+    faColor: 'text-green',
+    daysS3: '5',
+    s3Color: 'text-green',
+    daysS5: '3',
+    s5Color: 'text-green',
+  },
+]
 
 export default function ComparePage() {
-  const { data: cmpData } = useQuery({
-    queryKey: ['compare'],
-    queryFn: fetchCompare,
-    placeholderData: MOCK_COMPARE,
-  })
-
-  const results = cmpData?.results || MOCK_COMPARE.results
-  const methods = cmpData?.methods || MOCK_COMPARE.methods
-
-  const metrics = ['precision', 'recall', 'f1']
-  const bestPrec   = bestValue(results, 'precision')
-  const bestRecall = bestValue(results, 'recall')
-  const bestF1     = bestValue(results, 'f1')
-  const bestFAPUW  = bestValue(results, 'false_alerts_per_user_per_week', false)
-
-  // Radar data
-  const radarData = metrics.map(m => {
-    const row = { metric: m.toUpperCase() }
-    for (const [key, val] of Object.entries(results)) {
-      row[key] = +(val[m] * 100).toFixed(1)
-    }
-    return row
-  })
-
-  // F1 bar data
-  const f1Data = Object.entries(results).map(([key, val]) => ({
-    name: METHODS_META[key]?.label || key,
-    F1:   +(val.f1 * 100).toFixed(1),
-    Precision: +(val.precision * 100).toFixed(1),
-    Recall: +(val.recall * 100).toFixed(1),
-  }))
-
-  // Days to first alert for S3
-  const daysData = ['A_threshold', 'B_iso_raw', 'C_baselines_only', 'D_full_fusion'].map(key => ({
-    name: METHODS_META[key]?.label || key,
-    S3:   results[key]?.days_to_first_S3 ?? null,
-    S5:   results[key]?.days_to_first_S5 ?? null,
-  }))
+  const [dateFilter, setDateFilter] = useState('Last 30 days')
+  const [scenarioFilter, setScenarioFilter] = useState('All Scenarios')
 
   return (
-    <div>
-      <h1 className="page-title">⚖ Method Comparison</h1>
-      <p className="page-subtitle">
-        Four detection methods evaluated on identical labelled event streams
-      </p>
-
-      {/* Caveat */}
-      <div style={{
-        padding: '12px 16px',
-        background: 'rgba(255,165,2,0.08)',
-        border: '1px solid rgba(255,165,2,0.2)',
-        borderRadius: 10,
-        fontSize: 12,
-        color: 'var(--risk-review)',
-        marginBottom: 24,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-      }}>
-        ⚠️ {cmpData?.caveat || MOCK_COMPARE.caveat}
-      </div>
-
-      {/* Method descriptions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {Object.entries(methods).map(([key, desc]) => (
-          <div key={key} style={{
-            padding: '12px 14px',
-            background: 'var(--bg-glass)',
-            border: `1px solid ${METHODS_META[key]?.color}33`,
-            borderRadius: 10,
-            borderLeft: `3px solid ${METHODS_META[key]?.color}`,
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: METHODS_META[key]?.color, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Method {METHODS_META[key]?.short}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>{desc}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Main metrics table */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <div className="card-title">📊 Performance Metrics</div>
+    <div className="compare-page-container">
+      {/* ── Page Header ──────────────────────────────────────────────────── */}
+      <div className="compare-page-header">
+        <div>
+          <h1 className="compare-title">Compare Methods</h1>
+          <p className="compare-subtitle">Compare different detection approaches across key metrics and scenarios.</p>
         </div>
-        <div className="table-wrap">
-          <table aria-label="Comparison metrics table">
+
+        <div className="compare-header-controls">
+          <div className="select-pill" style={{ padding: '8px 14px', fontSize: 12.5 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span>{dateFilter}</span>
+            <span className="select-chevron">⌵</span>
+          </div>
+
+          <div className="select-pill" style={{ padding: '8px 14px', fontSize: 12.5 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+            </svg>
+            <span>{scenarioFilter}</span>
+            <span className="select-chevron">⌵</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 4 Top KPI Metric Cards ───────────────────────────────────────── */}
+      <div className="compare-kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-icon-box kpi-icon-green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Best F1 Score</div>
+            <div className="kpi-value text-green">90.9%</div>
+            <div className="kpi-sub">D - CipherSentinel</div>
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon-box kpi-icon-blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <circle cx="12" cy="12" r="2" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Highest Precision</div>
+            <div className="kpi-value text-blue">83.3%</div>
+            <div className="kpi-sub">D - CipherSentinel</div>
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon-box kpi-icon-purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Highest Recall</div>
+            <div className="kpi-value text-purple">100.0%</div>
+            <div className="kpi-sub">D - CipherSentinel</div>
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-icon-box kpi-icon-amber">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+          </div>
+          <div className="kpi-content">
+            <div className="kpi-label">Lowest False Alerts</div>
+            <div className="kpi-value text-orange">0.11</div>
+            <div className="kpi-sub">D - CipherSentinel</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Side-by-Side Comparison Charts ───────────────────────────────── */}
+      <div className="compare-charts-grid">
+        {/* Chart 1: Performance Comparison */}
+        <div className="compare-chart-card">
+          <div className="chart-header-group">
+            <div className="chart-icon-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span className="compare-chart-title">Performance Comparison</span>
+            </div>
+            <div className="compare-chart-sub">Compare precision, recall and F1 score across different methods.</div>
+          </div>
+
+          <div style={{ height: 240, marginTop: 16 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={PERFORMANCE_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F4F1" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#6B7D72', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fill: '#6B7D72', fontSize: 11 }} tickFormatter={v => `${v}%`} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v, name) => [`${v}%`, name]}
+                  contentStyle={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 11 }}
+                />
+                <Bar dataKey="precision" name="Precision" fill="#60A5FA" radius={[4, 4, 0, 0]} barSize={16} />
+                <Bar dataKey="recall" name="Recall" fill="#A855F7" radius={[4, 4, 0, 0]} barSize={16} />
+                <Bar dataKey="f1" name="F1" fill="#2DD4BF" radius={[4, 4, 0, 0]} barSize={16} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Custom Bottom Legend */}
+          <div className="compare-chart-legend">
+            <div className="legend-item"><span className="legend-box" style={{ background: '#60A5FA' }} />Precision</div>
+            <div className="legend-item"><span className="legend-box" style={{ background: '#A855F7' }} />Recall</div>
+            <div className="legend-item"><span className="legend-box" style={{ background: '#2DD4BF' }} />F1</div>
+          </div>
+        </div>
+
+        {/* Chart 2: Days to First Alert */}
+        <div className="compare-chart-card">
+          <div className="chart-header-group">
+            <div className="chart-header-flex">
+              <div className="chart-icon-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span className="compare-chart-title">Days to First Alert</span>
+              </div>
+              <div className="days-legend">
+                <span className="legend-item"><span className="legend-box" style={{ background: '#A7F3D0' }} />S3 (Low-and-Slow)</span>
+                <span className="legend-item"><span className="legend-box" style={{ background: '#FDE68A' }} />S5 (Departing Employee)</span>
+              </div>
+            </div>
+            <div className="compare-chart-sub">Lower is better. <span style={{ color: '#EF4444', fontWeight: 600 }}>✕ Missed</span> = never alerted on that scenario.</div>
+          </div>
+
+          <div style={{ height: 240, marginTop: 16 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={DAYS_TO_ALERT_DATA} margin={{ top: 20, right: 10, left: -20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F4F1" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#6B7D72', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 30]} ticks={[0, 10, 20, 30]} tick={{ fill: '#6B7D72', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v, name) => [`${v} days`, name === 's3' ? 'S3' : 'S5']}
+                  contentStyle={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 11 }}
+                />
+                <Bar
+                  dataKey="s3"
+                  name="S3 (Low-and-Slow)"
+                  fill="#A7F3D0"
+                  radius={[4, 4, 0, 0]}
+                  barSize={20}
+                  label={({ x, y, width, value, index }) => {
+                    if (index === 0) {
+                      return <text x={x + width / 2} y={y - 8} fill="#EF4444" textAnchor="middle" fontSize={11} fontWeight={700}>✕</text>
+                    }
+                    return <text x={x + width / 2} y={y - 8} fill="#4B5563" textAnchor="middle" fontSize={11} fontWeight={600}>{value}d</text>
+                  }}
+                />
+                <Bar
+                  dataKey="s5"
+                  name="S5 (Departing Employee)"
+                  fill="#FDE68A"
+                  radius={[4, 4, 0, 0]}
+                  barSize={20}
+                  label={({ x, y, width, value }) => (
+                    <text x={x + width / 2} y={y - 8} fill="#4B5563" textAnchor="middle" fontSize={11} fontWeight={600}>{value}d</text>
+                  )}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Detailed Metrics Table ───────────────────────────────────────── */}
+      <div className="detailed-metrics-card">
+        <div className="detailed-metrics-header">
+          <div>
+            <div className="detailed-title-row">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M7 8h10" />
+                <path d="M7 12h10" />
+                <path d="M7 16h10" />
+              </svg>
+              <span className="compare-chart-title">Detailed Metrics</span>
+            </div>
+            <div className="compare-chart-sub">Complete comparison of all methods across key evaluation metrics.</div>
+          </div>
+
+          <button className="download-report-btn" type="button">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Download Report</span>
+          </button>
+        </div>
+
+        <div className="compare-table-wrapper">
+          <table className="custom-table compare-table">
             <thead>
               <tr>
-                <th>Method</th>
-                <th>TP</th><th>FP</th><th>FN</th><th>TN</th>
-                <th>Precision</th><th>Recall</th><th>F1</th>
-                <th>FA/User/Wk</th>
-                <th>Days→S3</th>
-                <th>Days→S5</th>
+                <th>METHOD</th>
+                <th>TP</th>
+                <th>FP</th>
+                <th>FN</th>
+                <th>TN</th>
+                <th>PRECISION</th>
+                <th>RECALL</th>
+                <th>F1</th>
+                <th>FA/USER/WK</th>
+                <th>DAYS → S3</th>
+                <th>DAYS → S5</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(results).map(([key, val]) => {
-                const meta = METHODS_META[key]
-                return (
-                  <tr key={key}>
-                    <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta?.color, flexShrink: 0 }} />
-                        <span style={{ fontWeight: key === 'D_full_fusion' ? 700 : 400, color: key === 'D_full_fusion' ? 'var(--accent-green)' : 'var(--text-0)', fontSize: 12 }}>
-                          {meta?.label || key}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="td-mono" style={{ color: 'var(--accent-green)' }}>{val.TP}</td>
-                    <td className="td-mono" style={{ color: val.FP > 2 ? 'var(--risk-high)' : 'var(--text-1)' }}>{val.FP}</td>
-                    <td className="td-mono" style={{ color: val.FN > 0 ? 'var(--risk-review)' : 'var(--text-1)' }}>{val.FN}</td>
-                    <td className="td-mono">{val.TN}</td>
-                    <td className={key === bestPrec ? 'compare-winner td-mono' : 'compare-loser td-mono'}>
-                      {(val.precision * 100).toFixed(1)}%
-                    </td>
-                    <td className={key === bestRecall ? 'compare-winner td-mono' : 'td-mono'}>
-                      {(val.recall * 100).toFixed(1)}%
-                    </td>
-                    <td className={key === bestF1 ? 'compare-winner td-mono' : 'td-mono'}>
-                      {(val.f1 * 100).toFixed(1)}%
-                    </td>
-                    <td className={key === bestFAPUW ? 'compare-winner td-mono' : 'td-mono'}>
-                      {val.false_alerts_per_user_per_week}
-                    </td>
-                    <td className="td-mono" style={{ color: val.days_to_first_S3 == null ? 'var(--risk-high)' : val.days_to_first_S3 < 10 ? 'var(--accent-green)' : 'var(--text-1)' }}>
-                      {val.days_to_first_S3 != null ? val.days_to_first_S3 : '✗ Missed'}
-                    </td>
-                    <td className="td-mono" style={{ color: val.days_to_first_S5 == null ? 'var(--risk-high)' : val.days_to_first_S5 < 5 ? 'var(--accent-green)' : 'var(--text-1)' }}>
-                      {val.days_to_first_S5 != null ? val.days_to_first_S5 : '✗ Missed'}
-                    </td>
-                  </tr>
-                )
-              })}
+              {DETAILED_METRICS_DATA.map((row) => (
+                <tr key={row.method}>
+                  <td>
+                    <div className="method-cell">
+                      <span className="method-dot" style={{ backgroundColor: row.dotColor }} />
+                      <span className="method-name">{row.method}</span>
+                    </div>
+                  </td>
+                  <td>{row.tp}</td>
+                  <td>{row.fp}</td>
+                  <td>{row.fn}</td>
+                  <td>{row.tn}</td>
+                  <td className={row.precColor || ''}>{row.precision}</td>
+                  <td className={row.recColor || ''}>{row.recall}</td>
+                  <td className={row.f1Color || ''}>{row.f1}</td>
+                  <td className={row.faColor || ''}>{row.faUserWk}</td>
+                  <td className={row.s3Color || ''}>{row.daysS3}</td>
+                  <td className={row.s5Color || ''}>{row.daysS5}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      <div className="grid-2">
-        {/* F1 bar chart */}
-        <div className="card">
-          <div className="card-title" style={{ marginBottom: 16 }}>📈 F1 / Precision / Recall</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={f1Data} barSize={14}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(79,158,255,0.07)" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: 'var(--text-3)', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} unit="%" tick={{ fill: 'var(--text-2)', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{ background: 'var(--bg-2)', border: '1px solid var(--border-medium)', borderRadius: 8, fontSize: 12 }}
-                labelStyle={{ color: 'var(--text-0)' }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Precision" fill="#4f9eff" radius={[2,2,0,0]} />
-              <Bar dataKey="Recall"    fill="#8b5cf6" radius={[2,2,0,0]} />
-              <Bar dataKey="F1"        fill="#22d3a5" radius={[2,2,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Days to first alert */}
-        <div className="card">
-          <div className="card-title" style={{ marginBottom: 16 }}>⏱ Days to First Alert</div>
-          <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 12, lineHeight: 1.4 }}>
-            Lower = better. <strong style={{ color: 'var(--risk-high)' }}>✗ Missed</strong> = never alerted on that scenario.
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {Object.entries(results).map(([key, val]) => {
-              const meta = METHODS_META[key]
-              return (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }}>
-                  <div style={{ width: 110, color: 'var(--text-1)', fontWeight: key === 'D_full_fusion' ? 700 : 400 }}>
-                    {meta?.label}
-                  </div>
-                  <div style={{ display: 'flex', gap: 16 }}>
-                    <div>
-                      <span style={{ fontSize: 10, color: 'var(--text-3)' }}>S3: </span>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)',
-                        color: val.days_to_first_S3 == null ? 'var(--risk-high)' : val.days_to_first_S3 < 6 ? 'var(--accent-green)' : 'var(--text-1)',
-                        fontWeight: 700,
-                      }}>
-                        {val.days_to_first_S3 != null ? `${val.days_to_first_S3}d` : '✗'}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: 10, color: 'var(--text-3)' }}>S5: </span>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)',
-                        color: val.days_to_first_S5 == null ? 'var(--risk-high)' : val.days_to_first_S5 < 4 ? 'var(--accent-green)' : 'var(--text-1)',
-                        fontWeight: 700,
-                      }}>
-                        {val.days_to_first_S5 != null ? `${val.days_to_first_S5}d` : '✗'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
       </div>
     </div>
