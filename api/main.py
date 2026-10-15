@@ -1,313 +1,281 @@
-"""
-main.py  –  CipherSentinel FastAPI backend.
-
-Endpoints:
-  GET  /health
-  POST /api/replay/start?scenario=
-  GET  /api/alerts?since=
-  GET  /api/alerts/{id}
-  GET  /api/entities/{id}/timeline
-  GET  /api/compare?scenario=
-  POST /api/alerts/{id}/feedback
-"""
-
+"""CipherSentinel metadata-only demo API and polling replay engine."""
 from __future__ import annotations
 
 import json
 import os
 import sys
-import time
 import threading
-from collections import defaultdict
-from datetime import datetime
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
-# ── path setup so we can import ml/ modules ───────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(BASE_DIR, "ml"))
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(BASE_DIR / "ml"))
+from api.config import MODEL_PATH, REPLAY_INTERVAL_SEC, SCALER_PATH  # noqa: E402
 
-from config import (
-    DATA_DIR,
-    DEFAULT_CORS_ORIGINS,
-    MODEL_PATH,
-    REPLAY_INTERVAL_SEC,
-    SCALER_PATH,
-)
+DATA_DIR = BASE_DIR / "data"
+SCENARIO_USERS = {"S1": "U-000", "S2": "U-008", "S3": "U-014", "S4": "U-009", "S5": "U-021", "S6": "U-002"}
+SCENARIOS = [
+    {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
+    {"id": "S2", "name": "Single 400 MB upload at 02:00", "expected": "High alert"},
+    {"id": "S3", "name": "Low-and-slow: 40 MB/day for 10 days", "expected": "Alert mid-period"},
+    {"id": "S4", "name": "Finance + sync tool + new destination", "expected": "Review/High"},
+    {"id": "S5", "name": "Departing employee ramp", "expected": "Alert before final days"},
+    {"id": "S6", "name": "New laptop cloud sync (hard negative)", "expected": "At most Review"},
+    {"id": "ALL", "name": "Full 30-day stream", "expected": "All scenarios"},
+]
 
-DATA_PATH = os.path.join(BASE_DIR, DATA_DIR)
-
-# ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="CipherSentinel API", version="1.0.0")
-
-# CORS
-cors_origins = os.getenv("CORS_ORIGINS", ",".join(DEFAULT_CORS_ORIGINS)).split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],   # restrict to cors_origins in production
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── In-memory store (loaded once at startup) ─────────────────────────────────
-store: dict[str, Any] = {
-    "all_alerts": [],          # all scored alerts, newest-first
-    "live_alerts": [],         # alerts surfaced during the current replay
-    "replay_running": False,
-    "replay_scenario": None,
-    "replay_thread": None,
-    "features_15m": None,      # pd.DataFrame
-    "user_bl": {},
-    "peer_bl": {},
-    "model": None,
-    "scaler": None,
-    "evaluation": {},
-    "feedback": {},            # alert_id → {verdict, ts}
-    "entity_timelines": defaultdict(list),
+state: dict[str, Any] = {
+    "all_alerts": [], "live_alerts": [], "replay_running": False,
+    "replay_scenario": None, "replay_thread": None, "replay_stop": None,
+    "features": None, "timelines": {}, "user_bl": {}, "peer_bl": {},
+    "model": None, "scaler": None, "evaluation": {}, "feedback": {},
+    "load_error": None,
 }
+lock = threading.RLock()
+
+app = FastAPI(title="CipherSentinel API", version="1.1.0")
+origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
 
-def load_artifacts():
-    """Load all precomputed artefacts from data/."""
-    alerts_path = os.path.join(DATA_PATH, "alerts.json")
-    if os.path.exists(alerts_path):
-        with open(alerts_path) as f:
-            store["all_alerts"] = json.load(f)
-        print(f"[startup] Loaded {len(store['all_alerts'])} alerts")
-
-    feat_path = os.path.join(DATA_PATH, "features_15m.csv")
-    if os.path.exists(feat_path):
-        store["features_15m"] = pd.read_csv(feat_path)
-        print(f"[startup] Loaded feature set ({len(store['features_15m'])} rows)")
-
-    for name, key in [("baselines_user.json", "user_bl"), ("baselines_peer.json", "peer_bl")]:
-        p = os.path.join(DATA_PATH, name)
-        if os.path.exists(p):
-            with open(p) as f:
-                store[key] = json.load(f)
-
-    for name, key in [(MODEL_PATH, "model"), (SCALER_PATH, "scaler")]:
-        p = os.path.join(BASE_DIR, name)
-        if os.path.exists(p):
-            store[key] = joblib.load(p)
-            print(f"[startup] Loaded {key}")
-
-    eval_path = os.path.join(DATA_PATH, "evaluation.json")
-    if os.path.exists(eval_path):
-        with open(eval_path) as f:
-            store["evaluation"] = json.load(f)
-
-    # Build entity timelines from features
-    _build_entity_timelines()
+def _read_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
 
 
-def _build_entity_timelines():
-    df = store["features_15m"]
-    if df is None:
-        return
-    for uid, udf in df.groupby("user_id"):
-        udf = udf.sort_values("window")
-        store["entity_timelines"][uid] = [
-            {
-                "window": str(row["window"]),
-                "out_bytes": float(row.get("out_bytes", 0)),
-                "in_bytes":  float(row.get("in_bytes", 0)),
-                "out_mb":    round(float(row.get("out_bytes", 0)) / 1e6, 3),
-                "in_mb":     round(float(row.get("in_bytes", 0)) / 1e6, 3),
-                "conn_count": int(row.get("conn_count", 0)),
-                "primary_sni": str(row.get("primary_sni", "")),
-                "primary_category": str(row.get("dest_category", "unknown")),
-                "has_exfil": int(row.get("has_exfil", 0)),
-                "scenario": str(row.get("scenarios", "")),
-            }
-            for _, row in udf.iterrows()
-        ]
+
+
+def load_artifacts() -> None:
+    """Load shipped demo artifacts once, outside the health response path."""
+    try:
+        alerts = _read_json(DATA_DIR / "alerts.json", [])
+        if not isinstance(alerts, list) or any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in alerts):
+            raise ValueError("data/alerts.json must contain alert objects with string IDs")
+        features_path = DATA_DIR / "features_15m.csv"
+        features = pd.read_csv(features_path) if features_path.exists() else None
+        user_bl = _read_json(DATA_DIR / "baselines_user.json", {})
+        peer_bl = _read_json(DATA_DIR / "baselines_peer.json", {})
+        evaluation = _read_json(DATA_DIR / "evaluation.json", {})
+        model_path, scaler_path = BASE_DIR / MODEL_PATH, BASE_DIR / SCALER_PATH
+        model = joblib.load(model_path) if model_path.exists() else None
+        scaler = joblib.load(scaler_path) if scaler_path.exists() else None
+        timelines: dict[str, list[dict[str, Any]]] = {}
+        if features is not None and "user_id" in features:
+            for uid, group in features.groupby("user_id"):
+                points = []
+                for row in group.sort_values("window").to_dict(orient="records"):
+                    out_bytes, in_bytes = float(row.get("out_bytes", 0) or 0), float(row.get("in_bytes", 0) or 0)
+                    points.append({
+                        "window": str(row.get("window", "")), "out_bytes": out_bytes, "in_bytes": in_bytes,
+                        "out_mb": round(out_bytes / 1e6, 3), "in_mb": round(in_bytes / 1e6, 3),
+                        "conn_count": int(row.get("conn_count", 0) or 0), "primary_sni": str(row.get("primary_sni", "")),
+                        "primary_category": str(row.get("primary_category", row.get("dest_category", "unknown"))),
+                        "has_exfil": int(row.get("has_exfil", 0) or 0), "scenario": str(row.get("scenarios", "")),
+                    })
+                timelines[str(uid)] = points
+        with lock:
+            state.update(all_alerts=alerts, features=features, user_bl=user_bl, peer_bl=peer_bl,
+                         evaluation=evaluation, model=model, scaler=scaler, timelines=timelines, load_error=None)
+    except Exception as exc:
+        with lock:
+            state["load_error"] = f"{type(exc).__name__}: {exc}"
 
 
 @app.on_event("startup")
-def startup_event():
-    load_artifacts()
+def startup_event() -> None:
+    threading.Thread(target=load_artifacts, name="artifact-loader", daemon=True).start()
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    with lock:
+        stop = state.get("replay_stop")
+        thread = state.get("replay_thread")
+        if stop:
+            stop.set()
+    if thread and thread.is_alive():
+        thread.join(timeout=2)
+
+
+def _require_loaded() -> None:
+    if state["load_error"]:
+        raise HTTPException(503, "Demo artifacts failed to load")
+    # Empty alerts are a valid loaded dataset. Startup may still be in progress.
+    if not state["all_alerts"] and not state["timelines"] and state["features"] is None:
+        raise HTTPException(503, "Demo data is still loading")
+
+
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "alerts_loaded": len(store["all_alerts"]),
-        "model_loaded": store["model"] is not None,
-        "replay_running": store["replay_running"],
-        "payload_bytes_inspected": 0,
-        "note": "CipherSentinel uses metadata only; zero payload bytes are read.",
-    }
+    with lock:
+        return {"status": "ok" if not state["load_error"] else "degraded", "alerts_loaded": len(state["all_alerts"]),
+                "data_ready": state["features"] is not None or bool(state["all_alerts"]),
+                "model_loaded": state["model"] is not None, "replay_running": state["replay_running"],
+                "payload_bytes_inspected": 0, "note": "CipherSentinel uses metadata only; zero payload bytes are read."}
 
 
-# ── Replay ────────────────────────────────────────────────────────────────────
-SCENARIO_USERS: dict[str, str] = {
-    "S1": "U-000",
-    "S2": "U-008",
-    "S3": "U-019",
-    "S4": "U-009",
-    "S5": "U-024",
-    "S6": "U-002",
-    "ALL": "",
-}
 
-def _replay_worker(scenario: str):
-    """Background thread: trickle alerts into live_alerts."""
-    store["live_alerts"] = []
-    all_a = store["all_alerts"]
 
-    if scenario == "ALL":
-        candidates = all_a
-    else:
-        # filter by scenario tag
-        candidates = [
-            a for a in all_a
-            if scenario in str(a.get("scenario", ""))
-            or a["entity"] == SCENARIO_USERS.get(scenario, "")
-        ]
+def _scenario_matches(alert: dict[str, Any], scenario: str) -> bool:
+    tags = alert.get("scenario", [])
+    if isinstance(tags, str):
+        tags = [tags]
+    return scenario in tags or alert.get("entity") == SCENARIO_USERS.get(scenario)
 
-    # sort chronologically for replay
-    candidates = sorted(candidates, key=lambda a: a.get("window", ""))
 
+def _replay_worker(scenario: str, stop: threading.Event) -> None:
+    with lock:
+        alerts = list(state["all_alerts"])
+    candidates = alerts if scenario == "ALL" else [a for a in alerts if _scenario_matches(a, scenario)]
+    candidates.sort(key=lambda a: str(a.get("window", "")))
     for alert in candidates:
-        if not store["replay_running"]:
+        if stop.wait(max(0.05, float(REPLAY_INTERVAL_SEC))):
             break
-        store["live_alerts"].append(alert)
-        time.sleep(REPLAY_INTERVAL_SEC)
-
-    store["replay_running"] = False
+        with lock:
+            if state["replay_stop"] is not stop:
+                break
+            state["live_alerts"].insert(0, alert)
+    with lock:
+        if state["replay_stop"] is stop:
+            state["replay_running"] = False
+            state["replay_thread"] = None
+            state["replay_stop"] = None
 
 
 @app.post("/api/replay/start")
-def replay_start(scenario: str = Query(default="ALL")):
-    if store["replay_running"]:
-        store["replay_running"] = False
-        if store["replay_thread"]:
-            store["replay_thread"].join(timeout=2)
-
-    store["replay_running"] = True
-    store["replay_scenario"] = scenario
-    t = threading.Thread(target=_replay_worker, args=(scenario,), daemon=True)
-    store["replay_thread"] = t
-    t.start()
+def replay_start(scenario: str = Query(default="ALL", pattern="^(S[1-6]|ALL)$")):
+    with lock:
+        previous_stop, previous_thread = state["replay_stop"], state["replay_thread"]
+        if previous_stop:
+            previous_stop.set()
+        if previous_thread and previous_thread.is_alive():
+            previous_thread.join(timeout=2)
+        stop = threading.Event()
+        state.update(live_alerts=[], replay_running=True, replay_scenario=scenario, replay_stop=stop)
+        thread = threading.Thread(target=_replay_worker, args=(scenario, stop), daemon=True, name=f"replay-{scenario}")
+        state["replay_thread"] = thread
+        thread.start()
     return {"status": "started", "scenario": scenario}
 
 
 @app.post("/api/replay/stop")
 def replay_stop():
-    store["replay_running"] = False
+    with lock:
+        stop, thread = state["replay_stop"], state["replay_thread"]
+        if stop:
+            stop.set()
+        state["replay_running"] = False
+    if thread and thread.is_alive():
+        thread.join(timeout=2)
     return {"status": "stopped"}
 
 
-# ── Alerts ────────────────────────────────────────────────────────────────────
+def _valid_since(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        # Accept ISO-8601 and the dataset's legacy `YYYY-mm-dd HH:MM:SS` format.
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
+    except (ValueError, TypeError):
+        raise HTTPException(400, "since must be an ISO-8601 timestamp")
+
+
 @app.get("/api/alerts")
-def get_alerts(
-    since: str | None = None,
-    live: bool = False,
-    limit: int = 100,
-):
-    alerts = store["live_alerts"] if live else store["all_alerts"]
-    if since:
-        alerts = [a for a in alerts if str(a.get("window", "")) > since]
+def get_alerts(since: str | None = None, live: bool = False, limit: int = Query(default=100, ge=1, le=500)):
+    _require_loaded()
+    cutoff = _valid_since(since)
+    with lock:
+        alerts = list(state["live_alerts"] if live else state["all_alerts"])
+    alerts.sort(key=lambda a: str(a.get("window", "")), reverse=True)
+    if cutoff:
+        # Windows in source files have no timezone and are still lexically comparable after normalization.
+        cutoff = cutoff.replace("T", " ")[:19]
+        alerts = [a for a in alerts if str(a.get("window", "")).replace("T", " ")[:19] > cutoff]
     return {"alerts": alerts[:limit], "total": len(alerts)}
 
 
 @app.get("/api/alerts/{alert_id}")
 def get_alert(alert_id: str):
-    for a in store["all_alerts"]:
-        if a["id"] == alert_id:
-            return a
-    raise HTTPException(status_code=404, detail="Alert not found")
+    _require_loaded()
+    with lock:
+        alert = next((a for a in state["all_alerts"] if a["id"] == alert_id), None)
+    if alert is None:
+        raise HTTPException(404, "Alert not found")
+    return alert
 
 
-# ── Feedback ──────────────────────────────────────────────────────────────────
 class FeedbackBody(BaseModel):
-    verdict: str    # "true_positive" | "false_positive"
-    notes: str = ""
+    model_config = ConfigDict(extra="forbid")
+    verdict: str = Field(pattern="^(true_positive|false_positive)$")
+    notes: str = Field(default="", max_length=2000)
 
 
 @app.post("/api/alerts/{alert_id}/feedback")
 def post_feedback(alert_id: str, body: FeedbackBody):
-    store["feedback"][alert_id] = {
-        "verdict": body.verdict,
-        "notes": body.notes,
-        "ts": datetime.utcnow().isoformat(),
-    }
-    return {"status": "recorded", "alert_id": alert_id}
+    _require_loaded()
+    with lock:
+        if not any(a["id"] == alert_id for a in state["all_alerts"]):
+            raise HTTPException(404, "Alert not found")
+        state["feedback"][alert_id] = {"verdict": body.verdict, "notes": body.notes, "ts": datetime.now(timezone.utc).isoformat()}
+        result = dict(state["feedback"][alert_id])
+    return {"status": "recorded", "alert_id": alert_id, **result}
 
 
-# ── Entity timeline ───────────────────────────────────────────────────────────
 @app.get("/api/entities/{entity_id}/timeline")
-def entity_timeline(entity_id: str, days: int = 30):
-    tl = store["entity_timelines"].get(entity_id, [])
-    if not tl:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    # compute per-user baseline from the first 14 days as reference
-    out_vals = [p["out_bytes"] for p in tl]
-    baseline_med = float(pd.Series(out_vals[:int(len(out_vals) * 0.5)]).median()) if out_vals else 0
-
-    return {
-        "entity": entity_id,
-        "timeline": tl[-days * 96:],   # ≈ 96 × 15-min windows per day
-        "baseline_out_bytes": baseline_med,
-    }
+def entity_timeline(entity_id: str, days: int = Query(default=30, ge=1, le=365)):
+    _require_loaded()
+    with lock:
+        timeline = list(state["timelines"].get(entity_id, []))
+    if not timeline:
+        raise HTTPException(404, "Entity not found")
+    baseline_samples = [p["out_bytes"] for p in timeline[:max(1, len(timeline) // 2)]]
+    baseline = float(pd.Series(baseline_samples).median()) if baseline_samples else 0.0
+    result = timeline[-days * 96:]
+    return {"entity": entity_id, "timeline": [{**p, "baseline_out_bytes": baseline} for p in result], "baseline_out_bytes": baseline}
 
 
-# ── Compare ───────────────────────────────────────────────────────────────────
 @app.get("/api/compare")
-def compare(scenario: str | None = None):
-    if not store["evaluation"]:
-        raise HTTPException(status_code=503, detail="Evaluation not yet computed")
-    return store["evaluation"]
+def compare(scenario: str | None = Query(default=None, pattern="^(S[1-6]|ALL)$")):
+    _require_loaded()
+    with lock:
+        evaluation = state["evaluation"]
+    if not evaluation:
+        raise HTTPException(503, "Evaluation not yet computed")
+    return evaluation
 
 
-# ── Entities list ─────────────────────────────────────────────────────────────
 @app.get("/api/entities")
 def list_entities():
-    df = store["features_15m"]
+    _require_loaded()
+    df = state["features"]
     if df is None:
         return {"entities": []}
-    summary = []
-    for uid, udf in df.groupby("user_id"):
-        role = udf["role"].iloc[0] if "role" in udf.columns else "unknown"
-        total_out = float(udf["out_bytes"].sum())
-        n_alerts  = sum(1 for a in store["all_alerts"] if a["entity"] == uid)
-        max_risk  = max((a["risk"] for a in store["all_alerts"] if a["entity"] == uid), default=0)
-        summary.append({
-            "entity": uid,
-            "role": role,
-            "total_out_gb": round(total_out / 1e9, 3),
-            "alert_count": n_alerts,
-            "max_risk": max_risk,
-        })
-    summary.sort(key=lambda x: x["max_risk"], reverse=True)
-    return {"entities": summary}
+    summaries = []
+    for uid, group in df.groupby("user_id"):
+        alerts = [a for a in state["all_alerts"] if a.get("entity") == uid]
+        summaries.append({"entity": uid, "role": str(group["role"].iloc[0]) if "role" in group else "unknown",
+                          "total_out_gb": round(float(group["out_bytes"].sum()) / 1e9, 3),
+                          "alert_count": len(alerts), "max_risk": max((a.get("risk", 0) for a in alerts), default=0)})
+    summaries.sort(key=lambda x: x["max_risk"], reverse=True)
+    return {"entities": summaries}
 
 
-# ── Scenarios ─────────────────────────────────────────────────────────────────
 @app.get("/api/scenarios")
 def list_scenarios():
-    return {
-        "scenarios": [
-            {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
-            {"id": "S2", "name": "Single 400 MB upload at 02:00",        "expected": "High alert"},
-            {"id": "S3", "name": "Low-and-slow: 40 MB/day for 10 days",  "expected": "Alert mid-period"},
-            {"id": "S4", "name": "Finance + sync tool + new destination", "expected": "Review/High"},
-            {"id": "S5", "name": "Departing employee ramp",               "expected": "Alert before final days"},
-            {"id": "S6", "name": "New laptop cloud sync (hard negative)",  "expected": "At most Review"},
-            {"id": "ALL","name": "Full 30-day stream",                    "expected": "All scenarios"},
-        ]
-    }
+    return {"scenarios": SCENARIOS}
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api.main:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")))

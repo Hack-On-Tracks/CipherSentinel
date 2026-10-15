@@ -1,3 +1,4 @@
+# CORS_ORIGINS is configured at deploy time. Local Vite uses the /api proxy.
 services:
   - type: web
     name: ciphersentinel-api
