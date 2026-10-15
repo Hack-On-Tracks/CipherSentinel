@@ -285,6 +285,58 @@ html, body {
   z-index: 10;
 }
 
+.topbar-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px 0 12px;
+  background-color: #F1F4F1;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  color: #101820;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  text-decoration: none;
+  font-family: var(--font-sans);
+}
+
+.topbar-back-btn svg {
+  color: #064E3B;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.topbar-back-btn:hover {
+  background-color: #E2EFE7;
+  border-color: rgba(6, 78, 59, 0.28);
+  color: #064E3B;
+  box-shadow: 0 2px 8px rgba(6, 78, 59, 0.08);
+}
+
+.topbar-back-btn:hover svg {
+  transform: translateX(-3px);
+}
+
+[data-theme='dark'] .topbar-back-btn {
+  background-color: #18281F;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #E6EFEA;
+}
+
+[data-theme='dark'] .topbar-back-btn svg {
+  color: #4ADE80;
+}
+
+[data-theme='dark'] .topbar-back-btn:hover {
+  background-color: #1F382A;
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #4ADE80;
+}
+
 .topbar-search-container {
   display: flex;
   align-items: center;

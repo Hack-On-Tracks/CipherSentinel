@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchHealth } from '../api.js'
 import { MOCK_HEALTH } from '../mockData.js'
 
-export default function TopBar({ page, searchQuery, setSearchQuery, theme, setTheme }) {
+export default function TopBar({ page, setPage, searchQuery, setSearchQuery, theme, setTheme }) {
   const { data: health } = useQuery({
     queryKey: ['health'],
     queryFn: async () => {
@@ -46,6 +46,21 @@ export default function TopBar({ page, searchQuery, setSearchQuery, theme, setTh
 
   return (
     <header className="topbar" role="banner">
+      {/* Return to Landing Page Arrow */}
+      <button
+        type="button"
+        className="topbar-back-btn"
+        onClick={() => setPage('landing')}
+        title="Back to Landing Page"
+        aria-label="Back to Landing Page"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+        <span className="topbar-back-label">Landing Page</span>
+      </button>
+
       {/* Search Input Bar */}
       <div className="topbar-search-container">
         <svg className="topbar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
