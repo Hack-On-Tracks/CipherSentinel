@@ -17,6 +17,15 @@ import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import RobustScaler
 
+import importlib
+
+try:
+    shap = importlib.import_module("shap")
+except Exception:
+    shap = None
+
+
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO not in sys.path:
     sys.path.insert(0, REPO)
@@ -148,8 +157,19 @@ def train(
     os.makedirs(os.path.dirname(os.path.abspath(model_path)), exist_ok=True)
     joblib.dump(model, model_path)
     joblib.dump(scaler, scaler_path)
+
+    explainer_path = os.path.join(os.path.dirname(os.path.abspath(model_path)), "explainer.joblib")
+    if shap is not None:
+        try:
+            explainer = shap.TreeExplainer(model)
+            joblib.dump(explainer, explainer_path)
+            print(f"[train] SHAP TreeExplainer precomputed and saved -> {explainer_path}")
+        except Exception as e:
+            print(f"[train] Warning: Failed to serialize SHAP TreeExplainer: {e}")
+
     print(f"[train] Isolation Forest trained on {len(benign)} training windows -> {model_path}")
     return model, scaler
+
 
 
 def main():

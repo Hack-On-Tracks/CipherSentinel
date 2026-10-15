@@ -151,7 +151,67 @@ export function AlertDetail({ alert, onClose }) {
             </div>
           ))}
 
+          {/* Explainable AI (SHAP TreeExplainer) */}
+          {alert.shap_explanation && alert.shap_explanation.length > 0 && (
+            <div style={{
+              marginTop: 18,
+              padding: '12px 14px',
+              background: 'rgba(0, 212, 255, 0.05)',
+              border: '1px solid rgba(0, 212, 255, 0.2)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-cyan)', textTransform: 'uppercase', letterSpacing: 0.8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>🧠</span>
+                  <span>Explainable AI · SHAP TreeExplainer</span>
+                </div>
+                <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
+                  Local Feature Attribution
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {alert.shap_explanation.map((item, idx) => {
+                  const impactVal = item.impact || 0;
+                  const isPositive = impactVal >= 0;
+                  const maxImpact = Math.max(...alert.shap_explanation.map(x => Math.abs(x.impact || 0)), 0.1);
+                  const barWidth = Math.min(100, Math.max(12, Math.round((Math.abs(impactVal) / maxImpact) * 100)));
+
+                  return (
+                    <div key={idx} style={{ fontSize: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <span style={{ color: 'var(--text-1)' }}>{item.label}</span>
+                        <span style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          color: isPositive ? 'var(--risk-high)' : 'var(--accent-green)'
+                        }}>
+                          {isPositive ? '+' : ''}{impactVal.toFixed(3)}
+                        </span>
+                      </div>
+                      <div style={{
+                        height: 5,
+                        background: 'rgba(255,255,255,0.08)',
+                        borderRadius: 3,
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${barWidth}%`,
+                          background: isPositive
+                            ? 'linear-gradient(90deg, #ff9f43, #ff4757)'
+                            : 'linear-gradient(90deg, #00d2d3, #2ed573)',
+                          borderRadius: 3,
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Recommended action */}
+
           <div style={{
             marginTop: 20,
             padding: '14px 16px',

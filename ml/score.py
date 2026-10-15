@@ -32,9 +32,50 @@ from api.config import (
     CATEGORY_LABELS, SLOW_LEAK_CEILING_BYTES
 )
 from baseline import score_self, score_peer
-from train import normalise_features
+from train import FEATURE_COLS, normalise_features
+
+FEATURE_DESCRIPTIONS = {
+    "out_z": "Outbound volume deviation (Z-score)",
+    "ratio_z": "Upload/download ratio spike",
+    "conn_count": "Connection frequency anomaly",
+    "max_duration": "Long-lived flow duration",
+    "hour_of_week": "Unusual off-hours timing",
+    "new_dest_user": "First contact with destination for user",
+    "new_dest_org": "First contact with destination for org",
+    "ja4_rare": "Rare/unapproved TLS fingerprint (JA4)",
+    "category_risk": "Destination risk category",
+}
+
+
+def _explain_window(row: pd.Series, explainer, scaler, user_bl: dict, top_k: int = 3) -> list[dict]:
+    if explainer is None or scaler is None:
+        return []
+    try:
+        norm_mat = normalise_features(pd.DataFrame([row]), user_bl)
+        scaled_mat = scaler.transform(norm_mat)
+        raw_shap = explainer.shap_values(scaled_mat)[0]
+
+        ranked = sorted(
+            zip(FEATURE_COLS, raw_shap),
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        explanations = []
+        for feat, val in ranked:
+            if len(explanations) >= top_k:
+                break
+            explanations.append({
+                "feature": feat,
+                "label": FEATURE_DESCRIPTIONS.get(feat, feat),
+                "impact": round(float(val), 3),
+            })
+        return explanations
+    except Exception:
+        return []
 
 RECOMMENDED_ACTION = "Confirm with the user's manager before any restriction"
+
 
 
 def _severity(risk: int) -> str:
@@ -88,6 +129,7 @@ def score_window(
     allow_trusted_build: bool = True,
     sixth_signal_fn: callable | None = None,
     include_info: bool = False,
+    explainer=None,
 ):
     """
     Score one 15-minute entity window against the five signals.
@@ -143,6 +185,13 @@ def score_window(
 
     median_mb = _baseline_out(row, user_bl) / 1e6
 
+    shap_explanation = _explain_window(row, explainer, scaler, user_bl) if explainer is not None else []
+    if shap_explanation:
+        top_driver_strs = [f"{item['label']} ({'+' if item['impact'] > 0 else ''}{item['impact']:.2f})" for item in shap_explanation[:2]]
+        iso_detail = f"metadata pattern anomaly {iso_value:.2f} (SHAP drivers: {', '.join(top_driver_strs)})"
+    else:
+        iso_detail = f"metadata pattern anomaly {iso_value:.2f} from bytes, timing, ratio, novelty, and JA4"
+
     signals = [
         {
             "name": "self_deviation",
@@ -157,7 +206,7 @@ def score_window(
         {
             "name": "isolation_forest",
             "points": round(iso_points, 1),
-            "detail": f"metadata pattern anomaly {iso_value:.2f} from bytes, timing, ratio, novelty, and JA4",
+            "detail": iso_detail,
         },
         {
             "name": "peer_deviation",
@@ -192,6 +241,7 @@ def score_window(
         "risk": risk,
         "severity": severity,
         "signals": signals,
+        "shap_explanation": shap_explanation,
         "destination": {"sni": sni, "first_seen_for_user": first},
         "recommended_action": RECOMMENDED_ACTION,
     }
@@ -214,6 +264,7 @@ def score_all(
     peer_bl_path = peer_bl_path or os.path.join(base_data, "baselines_peer.json")
     model_path = model_path or os.path.join(base_data, "model.joblib")
     scaler_path = scaler_path or os.path.join(base_data, "scaler.joblib")
+    explainer_path = os.path.join(base_data, "explainer.joblib")
     out_path = out_path or os.path.join(base_data, "alerts.json")
 
     df = pd.read_csv(feat_path)
@@ -229,12 +280,14 @@ def score_all(
 
     model = joblib.load(model_path) if os.path.isfile(model_path) else None
     scaler = joblib.load(scaler_path) if os.path.isfile(scaler_path) else None
+    explainer = joblib.load(explainer_path) if os.path.isfile(explainer_path) else None
 
     alerts = []
     for _, row in df.iterrows():
-        a = score_window(row, model, scaler, user_bl, peer_bl)
+        a = score_window(row, model, scaler, user_bl, peer_bl, explainer=explainer)
         if a is not None:
             alerts.append(a)
+
 
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
