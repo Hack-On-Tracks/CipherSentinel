@@ -14,6 +14,7 @@ export const fetchScenarios = () => api.get('/api/scenarios').then(r => r.data)
 
 export const startReplay    = (scenario = 'ALL') => api.post('/api/replay/start', null, { params: { scenario } }).then(r => r.data)
 export const stopReplay     = () => api.post('/api/replay/stop').then(r => r.data)
+export const replayScenario = (scenario) => api.post(`/api/scenarios/${scenario}/replay`).then(r => r.data)
 export const postFeedback   = (id, verdict, notes = '') =>
   api.post(`/api/alerts/${id}/feedback`, { verdict, notes }).then(r => r.data)
 

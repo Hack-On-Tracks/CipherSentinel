@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+import ast
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,9 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "ml"))
 from api.config import MODEL_PATH, REPLAY_INTERVAL_SEC, SCALER_PATH  # noqa: E402
+from ml.generate import SCENARIO_USERS  # noqa: E402
 
 DATA_DIR = BASE_DIR / "data"
-SCENARIO_USERS = {"S1": "U-000", "S2": "U-008", "S3": "U-014", "S4": "U-009", "S5": "U-021", "S6": "U-002"}
 SCENARIOS = [
     {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
     {"id": "S2", "name": "Single 400 MB upload at 02:00", "expected": "High alert"},
@@ -43,7 +44,9 @@ state: dict[str, Any] = {
 lock = threading.RLock()
 
 app = FastAPI(title="CipherSentinel API", version="1.1.0")
-origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()]
+origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()] or [
+    "http://localhost:5173", "http://localhost:3000"
+]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
 
@@ -57,13 +60,22 @@ def _read_json(path: Path, default: Any) -> Any:
 
 
 def load_artifacts() -> None:
-    """Load shipped demo artifacts once, outside the health response path."""
+    """Load prepared demo artifacts once; never generate or train on startup."""
     try:
+        required = [DATA_DIR / "alerts.json", DATA_DIR / "features_15m.csv",
+                    DATA_DIR / "baselines_user.json", DATA_DIR / "baselines_peer.json",
+                    BASE_DIR / MODEL_PATH, BASE_DIR / SCALER_PATH]
+        missing = [str(path.relative_to(BASE_DIR)) for path in required if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                "Missing prepared artifacts: " + ", ".join(missing)
+                + ". Run `python run_pipeline.py` from the repository root to prepare them."
+            )
         alerts = _read_json(DATA_DIR / "alerts.json", [])
         if not isinstance(alerts, list) or any(not isinstance(item, dict) or not isinstance(item.get("id"), str) for item in alerts):
             raise ValueError("data/alerts.json must contain alert objects with string IDs")
         features_path = DATA_DIR / "features_15m.csv"
-        features = pd.read_csv(features_path) if features_path.exists() else None
+        features = pd.read_csv(features_path)
         user_bl = _read_json(DATA_DIR / "baselines_user.json", {})
         peer_bl = _read_json(DATA_DIR / "baselines_peer.json", {})
         evaluation = _read_json(DATA_DIR / "evaluation.json", {})
@@ -82,6 +94,7 @@ def load_artifacts() -> None:
                         "conn_count": int(row.get("conn_count", 0) or 0), "primary_sni": str(row.get("primary_sni", "")),
                         "primary_category": str(row.get("primary_category", row.get("dest_category", "unknown"))),
                         "has_exfil": int(row.get("has_exfil", 0) or 0), "scenario": str(row.get("scenarios", "")),
+                        "cum_out_7d": float(row.get("cum_out_7d", 0) or 0),
                     })
                 timelines[str(uid)] = points
         with lock:
@@ -94,7 +107,7 @@ def load_artifacts() -> None:
 
 @app.on_event("startup")
 def startup_event() -> None:
-    threading.Thread(target=load_artifacts, name="artifact-loader", daemon=True).start()
+    load_artifacts()
 
 
 @app.on_event("shutdown")
@@ -110,7 +123,7 @@ def shutdown_event() -> None:
 
 def _require_loaded() -> None:
     if state["load_error"]:
-        raise HTTPException(503, "Demo artifacts failed to load")
+        raise HTTPException(503, state["load_error"])
     # Empty alerts are a valid loaded dataset. Startup may still be in progress.
     if not state["all_alerts"] and not state["timelines"] and state["features"] is None:
         raise HTTPException(503, "Demo data is still loading")
@@ -243,6 +256,38 @@ def entity_timeline(entity_id: str, days: int = Query(default=30, ge=1, le=365))
     baseline = float(pd.Series(baseline_samples).median()) if baseline_samples else 0.0
     result = timeline[-days * 96:]
     return {"entity": entity_id, "timeline": [{**p, "baseline_out_bytes": baseline} for p in result], "baseline_out_bytes": baseline}
+
+
+@app.post("/api/scenarios/{scenario_id}/replay")
+def scenario_replay(scenario_id: str):
+    """Return the deterministic, precomputed scenario event sequence and alerts."""
+    _require_loaded()
+    if scenario_id not in SCENARIO_USERS:
+        raise HTTPException(404, "Unknown scenario. Choose S1 through S6.")
+    entity_id = SCENARIO_USERS[scenario_id]
+    role = "unknown"
+    events: list[dict[str, Any]] = []
+    for point in state["timelines"].get(entity_id, []):
+        raw = point.get("scenario", "")
+        try:
+            tags = ast.literal_eval(raw) if isinstance(raw, str) and raw.startswith("[") else ([raw] if raw else [])
+        except (ValueError, SyntaxError):
+            tags = [raw]
+        if scenario_id not in tags:
+            continue
+        event_minute = str(point["window"]).replace("T", " ")[:16]
+        matching_alerts = [a for a in state["all_alerts"] if a.get("entity") == entity_id
+                           and str(a.get("window", "")).replace("T", " ")[:16] == event_minute]
+        event = {**point, "scenario_id": scenario_id, "alerts": matching_alerts}
+        events.append(event)
+    feature_df = state["features"]
+    if feature_df is not None and "role" in feature_df and not feature_df[feature_df.user_id == entity_id].empty:
+        role = str(feature_df.loc[feature_df.user_id == entity_id, "role"].iloc[0])
+    events.sort(key=lambda item: item["window"])
+    return {"scenario": scenario_id, "entity": entity_id, "role": role,
+            "events": events, "event_count": len(events),
+            "alert_count": sum(len(event["alerts"]) for event in events),
+            "source": "precomputed backend feature windows and scored alert artifacts"}
 
 
 @app.get("/api/compare")

@@ -64,6 +64,13 @@ JA4_SYNC    = "t13d2020h2_ccccddddeeee_aabbccddeeff"
 START_DATE = datetime(2026, 3, 1)
 DAYS = 30
 
+# Canonical scenario-to-entity mapping, kept beside the injectors that define
+# each scenario so the API and generator cannot drift independently.
+SCENARIO_USERS = {
+    "S1": "U-000", "S2": "U-008", "S3": "U-019",
+    "S4": "U-009", "S5": "U-024", "S6": "U-002",
+}
+
 def build_users():
     users = []
     uid = 0

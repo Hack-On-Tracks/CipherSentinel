@@ -1,401 +1,150 @@
-import { useState, useEffect, useRef } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { fetchAlerts, fetchScenarios, startReplay, stopReplay } from '../api.js'
-import { MOCK_ALERTS, MOCK_SCENARIOS } from '../mockData.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { replayScenario } from '../api.js'
 import { AlertDetail } from '../components/AlertCard.jsx'
 
-const SCENARIOS_CONFIG = [
-  {
-    id: 'S1',
-    title: 'S1: Heavy Uploader',
-    desc: 'Legitimate heavy uploader (engineer)',
-    expected: 'Expected: No alert',
-    badgeClass: 'tag-expected-green',
-    iconBg: 'icon-bg-green',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-        <polyline points="16 7 22 7 22 13" />
-      </svg>
-    ),
-  },
-  {
-    id: 'S2',
-    title: 'S2: Midnight Upload',
-    desc: 'Single 400 MB upload at 02:00',
-    expected: 'Expected: High alert',
-    badgeClass: 'tag-expected-red',
-    iconBg: 'icon-bg-red',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-      </svg>
-    ),
-  },
-  {
-    id: 'S3',
-    title: 'S3: Low-and-Slow',
-    desc: 'Low-and-slow: 40 MB/day for 10 days',
-    expected: 'Expected: Alert mid-period',
-    badgeClass: 'tag-expected-amber',
-    iconBg: 'icon-bg-amber',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-  },
-  {
-    id: 'S4',
-    title: 'S4: Sync Tool',
-    desc: 'Finance + sync tool + new destination',
-    expected: 'Expected: Review/High',
-    badgeClass: 'tag-expected-amber',
-    iconBg: 'icon-bg-blue',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'S5',
-    title: 'S5: Departing Employee',
-    desc: 'Departing employee ramp',
-    expected: 'Expected: Alert before final days',
-    badgeClass: 'tag-expected-amber',
-    iconBg: 'icon-bg-purple',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-  },
-  {
-    id: 'S6',
-    title: 'S6: New Laptop (Hard-)',
-    desc: 'New laptop cloud sync (hard negative)',
-    expected: 'Expected: At most Review',
-    badgeClass: 'tag-expected-amber',
-    iconBg: 'icon-bg-cyan',
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="12" x="3" y="4" rx="2" />
-        <line x1="2" y1="20" x2="22" y2="20" />
-      </svg>
-    ),
-  },
+const SCENARIOS = [
+  { id: 'S1', title: 'Normal engineering traffic', desc: '2 GB build uploads to sanctioned cloud storage during working hours.', expected: 'Expected: no alert', tone: 'green' },
+  { id: 'S2', title: 'Large suspicious transfer', desc: 'A finance user sends 400 MB to mega.nz at 02:00.', expected: 'Expected: high alert', tone: 'red' },
+  { id: 'S3', title: 'Slow cumulative leak', desc: 'HR user sends 40 MB each day for ten days to wetransfer.com.', expected: 'Expected: cumulative alert', tone: 'amber' },
+  { id: 'S4', title: 'New anonymising destination', desc: 'Finance sync-tool fingerprint connects to anonfiles.com over five days.', expected: 'Expected: review or high', tone: 'amber' },
+  { id: 'S5', title: 'Rising outbound activity', desc: 'Sales user ramps transfers and uses new personal file-sharing destinations.', expected: 'Expected: alert during ramp', tone: 'amber' },
+  { id: 'S6', title: 'New laptop cloud sync', desc: 'Engineer performs a 3 GB first-day sync to sanctioned OneDrive.', expected: 'Expected: hard negative', tone: 'blue' },
+]
+const SIGNALS = [
+  ['self_deviation', 'Self-baseline', 30], ['destination_policy', 'Destination policy', 25],
+  ['isolation_forest', 'Isolation Forest', 20], ['peer_deviation', 'Peer-group baseline', 15], ['slow_leak', 'Seven-day accumulator', 10],
 ]
 
+function prettyBytes(value = 0) {
+  const n = Number(value) || 0
+  return n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${(n / 1e6).toFixed(1)} MB`
+}
+
 export default function ReplayPage() {
-  const [runningScenario, setRunningScenario] = useState(null)
-  const [liveAlerts, setLiveAlerts] = useState([])
-  const [autoScroll, setAutoScroll] = useState(true)
+  const [selected, setSelected] = useState(null)
+  const [result, setResult] = useState(null)
+  const [index, setIndex] = useState(-1)
+  const [playing, setPlaying] = useState(false)
+  const [speed, setSpeed] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showSignals, setShowSignals] = useState(true)
   const [selectedAlert, setSelectedAlert] = useState(null)
-  const [showHowItWorks, setShowHowItWorks] = useState(false)
-  const timerRef = useRef(null)
-  const feedEndRef = useRef(null)
+  const lockRef = useRef(false)
+  const resultsRef = useRef(null)
 
-  const startMut = useMutation({
-    mutationFn: (sc) => startReplay(sc),
-    onSuccess: (_, sc) => {
-      setRunningScenario(sc)
-      runDemoTrickle(sc)
-    },
-    onError: (_, sc) => {
-      setRunningScenario(sc)
-      runDemoTrickle(sc)
-    },
-  })
-
-  const stopMut = useMutation({
-    mutationFn: stopReplay,
-    onSuccess: () => {
-      setRunningScenario(null)
-      if (timerRef.current) clearInterval(timerRef.current)
-    },
-    onError: () => {
-      setRunningScenario(null)
-      if (timerRef.current) clearInterval(timerRef.current)
-    },
-  })
-
-  const runDemoTrickle = (scId) => {
-    let pool = MOCK_ALERTS
-    if (scId === 'S2') pool = [MOCK_ALERTS[0]]
-    else if (scId === 'S3') pool = [MOCK_ALERTS[1]]
-    else if (scId === 'S4') pool = [MOCK_ALERTS[2]]
-    else if (scId === 'S5') pool = [MOCK_ALERTS[3] || MOCK_ALERTS[0]]
-    else if (scId === 'S1') pool = [] // legitimate uploader = 0 alerts
-    else if (scId === 'S6') pool = [MOCK_ALERTS[1]]
-
-    let idx = 0
-    if (timerRef.current) clearInterval(timerRef.current)
-
-    timerRef.current = setInterval(() => {
-      if (idx >= pool.length) {
-        clearInterval(timerRef.current)
-        setRunningScenario(null)
-        return
-      }
-      const item = { ...pool[idx], id: `live-${Date.now()}-${idx}` }
-      setLiveAlerts(prev => [item, ...prev])
-      idx++
-    }, 1200)
-  }
+  const current = result?.events?.[index] || null
+  const currentAlert = current?.alerts?.[0] || null
+  const chart = useMemo(() => (result?.events || []).slice(0, index + 1).map((event, i) => ({
+    window: event.window?.replace('T', ' ').slice(5, 16) || `${i + 1}`,
+    outbound: Number(event.out_bytes || 0) / 1e6,
+    cumulative: Number(event.cum_out_7d || 0) / 1e6,
+  })), [result, index])
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [])
+    if (!playing || !result) return undefined
+    if (index + 1 >= result.events.length) { setPlaying(false); return undefined }
+    const timer = window.setTimeout(() => setIndex(v => v + 1), 1050 / speed)
+    return () => window.clearTimeout(timer)
+  }, [playing, result, index, speed])
 
-  const handleToggleScenario = (scId) => {
-    if (runningScenario === scId) {
-      stopMut.mutate()
-    } else {
-      startMut.mutate(scId)
+  const run = async (scenario, replay = false) => {
+    if (lockRef.current) return
+    if (replay && result?.scenario === scenario) {
+      setIndex(-1); setPlaying(true); setError(''); return
     }
+    lockRef.current = true
+    setLoading(true); setError(''); setSelected(scenario); setResult(null); setIndex(-1); setPlaying(false)
+    try {
+      const payload = await replayScenario(scenario)
+      setResult(payload)
+      if (!payload.events?.length) throw new Error(`No prepared feature windows were returned for ${scenario}. Run the preparation pipeline and check the scenario mapping.`)
+      setIndex(0); setPlaying(true)
+      window.requestAnimationFrame(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    } catch (err) {
+      setError(err?.response?.data?.detail || err.message || 'Scenario replay failed. Check that the API is running and prepared artifacts are available.')
+    } finally { lockRef.current = false; setLoading(false) }
   }
 
-  const handleClearFeed = () => {
-    setLiveAlerts([])
-  }
+  const reset = () => { setPlaying(false); setIndex(-1); setSelected(null); setResult(null); setError(''); setSelectedAlert(null) }
+  const pause = () => setPlaying(false)
+  const resume = () => { if (result && index + 1 < result.events.length) setPlaying(true) }
+  const progress = result?.events?.length ? Math.max(0, ((index + 1) / result.events.length) * 100) : 0
+  const risk = currentAlert?.risk
+  const severity = currentAlert?.severity
+  const signals = currentAlert?.signals || []
+  const dest = current?.primary_sni || 'Awaiting scenario event'
 
-  return (
-    <div className="replay-page-container">
-      {/* ── Page Header ──────────────────────────────────────────────────── */}
-      <div className="replay-page-header">
-        <div>
-          <h1 className="replay-title">Replay Scenarios</h1>
-          <p className="replay-subtitle">
-            Run pre-configured network scenarios to simulate insider threat behaviours and see how CipherSentinel detects them.
-          </p>
-        </div>
-
-        <button
-          className="how-it-works-btn"
-          type="button"
-          onClick={() => setShowHowItWorks(v => !v)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
-            <path d="M6 6h10" />
-            <path d="M6 10h10" />
-          </svg>
-          <span>How it works?</span>
-        </button>
+  return <div className="replay-page-container scenario-lab">
+    <header className="replay-page-header">
+      <div><div className="lab-eyebrow">SYNTHETIC SIMULATION</div><h1 className="replay-title">Scenario Simulation Lab</h1>
+        <p className="replay-subtitle">Explore how encrypted traffic behaviour changes and how CipherSentinel detects suspicious activity.</p>
+        <p className="lab-privacy">Uses synthetic traffic and network metadata. No payload decryption or real employee monitoring.</p>
       </div>
+      <span className="lab-status">● Synthetic simulation</span>
+    </header>
 
-      {/* Explainer Dropdown / Callout if clicked */}
-      {showHowItWorks && (
-        <div className="how-it-works-panel animate-slide-in">
-          <div className="panel-header">
-            <strong>How CipherSentinel Scenario Replay Works</strong>
-            <button className="panel-close-btn" onClick={() => setShowHowItWorks(false)}>✕</button>
-          </div>
-          <p>
-            CipherSentinel injects synthesized TLS network flow metadata for labeled test scenarios without decrypting or inspecting payload bytes. The detection pipeline evaluates self-baseline deviation, peer group clustering, destination threat policy, and Isolation Forest anomalies in real-time.
-          </p>
-        </div>
-      )}
-
-      {/* ── 6 Scenario Cards Grid (3 cols x 2 rows) ──────────────────────── */}
-      <div className="scenarios-grid">
-        {SCENARIOS_CONFIG.map(sc => {
-          const isRunning = runningScenario === sc.id
-
-          return (
-            <div key={sc.id} className="scenario-card">
-              <div className="scenario-card-left">
-                <div className={`scenario-icon-box ${sc.iconBg}`}>
-                  {sc.icon}
-                </div>
-                <div className="scenario-info">
-                  <div className="scenario-name">{sc.title}</div>
-                  <div className="scenario-desc">{sc.desc}</div>
-                  <div className={`scenario-badge ${sc.badgeClass}`}>
-                    {sc.expected}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                className={`scenario-start-btn ${isRunning ? 'btn-running' : ''}`}
-                onClick={() => handleToggleScenario(sc.id)}
-                type="button"
-              >
-                {isRunning ? (
-                  <>
-                    <span className="replay-pulse-dot" />
-                    <span>Stop</span>
-                  </>
-                ) : (
-                  <>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                    <span>Start</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* ── Live Alert Feed Section ───────────────────────────────────────── */}
-      <div className="live-feed-card">
-        <div className="live-feed-header">
-          <div className="live-feed-title-group">
-            <div className="live-broadcast-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
-                <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
-                <circle cx="12" cy="12" r="2" />
-                <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
-                <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
-              </svg>
-            </div>
-            <div>
-              <div className="live-feed-title">Live Alert Feed</div>
-              <div className="live-feed-subtitle">Alerts will appear here when you run a scenario</div>
-            </div>
-          </div>
-
-          <div className="live-feed-controls">
-            <button
-              className="feed-clear-btn"
-              onClick={handleClearFeed}
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-              </svg>
-              <span>Clear Feed</span>
+    <div className="lab-workspace">
+      <aside className="lab-scenario-rail" aria-label="Scenario selector">
+        <div className="lab-rail-heading"><h2>Choose a scenario</h2><p>Six synthetic traffic patterns</p></div>
+        <section className="scenarios-grid lab-grid" aria-label="Available scenarios">
+          {SCENARIOS.map(sc => <article key={sc.id} className={`scenario-card lab-card ${selected === sc.id ? 'lab-card-selected' : ''}`}>
+            <div className="lab-card-top"><span className={`lab-id tone-${sc.tone}`}>{sc.id}</span><span className={`scenario-badge tone-text-${sc.tone}`}>{sc.expected}</span></div>
+            <h2>{sc.title}</h2><p>{sc.desc}</p>
+            <button className="scenario-start-btn" type="button" disabled={loading} onClick={() => run(sc.id)}>
+              {loading && selected === sc.id ? 'Loading…' : `Run ${sc.id}`}
             </button>
+          </article>)}
+        </section>
+      </aside>
 
-            {/* Auto scroll toggle */}
-            <div className="auto-scroll-group" onClick={() => setAutoScroll(v => !v)}>
-              <div className={`switch-track ${autoScroll ? 'switch-on' : ''}`}>
-                <div className="switch-thumb" />
-              </div>
-              <span className="switch-label">Auto Scroll</span>
-            </div>
-          </div>
-        </div>
+      <div className="lab-main-column">
+        {error && <div className="lab-error" role="alert"><strong>Replay unavailable</strong><p>{error}</p><button type="button" onClick={() => selected && run(selected)}>Retry</button></div>}
 
-        {/* Feed Body: Empty State or Alerts Stream */}
-        <div className="live-feed-body">
-          {liveAlerts.length === 0 ? (
-            <div className="feed-empty-state">
-              <div className="feed-empty-icon-wrap">
-                <div className="feed-empty-icon-box">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#94A39A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <line x1="10" y1="9" x2="8" y2="9" />
-                  </svg>
-                </div>
-                {/* Subtle sparkle accents */}
-                <div className="sparkle sparkle-1">✦</div>
-                <div className="sparkle sparkle-2">✦</div>
-              </div>
-              <div className="feed-empty-title">No alerts yet</div>
-              <div className="feed-empty-subtitle">Select a scenario above and press Start to see live alerts.</div>
-            </div>
-          ) : (
-            <div className="alerts-full-stack" style={{ marginTop: 12 }}>
-              {liveAlerts.map(alert => {
-                const isHigh = alert.severity === 'high'
-                const barClass = isHigh ? 'bar-red' : 'bar-amber'
-                const scoreClass = isHigh ? 'text-red' : 'text-amber'
-                const badgeClass = isHigh ? 'badge-high' : 'badge-review'
-                const badgeText = isHigh ? '● HIGH' : '● REVIEW'
-
-                return (
-                  <div
-                    key={alert.id}
-                    className="dashboard-alert-card full-width-alert-card"
-                    onClick={() => setSelectedAlert(alert)}
-                  >
-                    <div className="alert-card-top">
-                      <div className="alert-card-entity-group">
-                        <div className={`alert-indicator-bar ${barClass}`} />
-                        <div>
-                          <div className="alert-entity-name">{alert.entity}</div>
-                          <div className="alert-entity-meta">{alert.role} · {alert.window}</div>
-                        </div>
-                      </div>
-                      <div className="alert-card-score-group">
-                        <span className={`alert-score-num ${scoreClass}`}>{alert.risk}</span>
-                        <span className={`alert-badge ${badgeClass}`}>{badgeText}</span>
-                        <span className="alert-card-chevron">›</span>
-                      </div>
-                    </div>
-
-                    <div className="alert-card-dest-row">
-                      <div className="alert-dest-target">
-                        <span className="dest-arrow">→</span>
-                        <span className="dest-sni">{alert.destination?.sni}</span>
-                      </div>
-                      {alert.destination?.category === 'Personal Share' && (
-                        <span className="tag-pill tag-personal-share">● Personal Share</span>
-                      )}
-                      {alert.destination?.category === 'File Transfer' && (
-                        <span className="tag-pill tag-file-transfer">● File Transfer</span>
-                      )}
-                      {alert.destination?.category === 'Unusual Volume' && (
-                        <span className="tag-pill tag-unusual-volume">● Unusual Volume</span>
-                      )}
-                      {alert.destination?.first_seen_for_user && (
-                        <span className="tag-pill tag-new-user">
-                          {alert.destination?.is_new_dest ? 'New destination' : 'New for user'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="alert-card-volume-row">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="17 8 12 3 7 8" />
-                        <line x1="12" y1="3" x2="12" y2="15" />
-                      </svg>
-                      <span>{alert.out_mb.toFixed(1)} MB outbound</span>
-                    </div>
-
-                    <div className="alert-progress-wrapper">
-                      <div className="alert-progress-track">
-                        <div className="alert-progress-fill fill-spectrum" style={{ width: `${alert.risk}%` }} />
-                      </div>
-                      <div className="alert-progress-labels">
-                        <span>0</span>
-                        <span className="label-info">INFO</span>
-                        <span className="label-review">REVIEW</span>
-                        <span className="label-high">HIGH</span>
-                        <span>100</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-              <div ref={feedEndRef} />
-            </div>
-          )}
-        </div>
+    <section className="lab-stage-card" ref={resultsRef}>
+      <div className="lab-section-heading"><div><h2>Encrypted traffic path</h2><p>Scenario events and detections come from prepared backend artifacts.</p></div>
+        {result && <span className="lab-entity">{result.entity} · {result.role}</span>}
       </div>
+      <div className="lab-flow">
+        <div className="lab-node"><span className="lab-node-icon">▣</span><strong>{result?.entity || 'Synthetic device'}</strong><small>{result?.role || 'Select a scenario'}</small></div>
+        <div className={`lab-connection ${current ? 'flow-active' : ''} ${Number(current?.out_bytes || 0) >= 1e9 ? 'flow-xlarge' : Number(current?.out_bytes || 0) >= 1e8 ? 'flow-large' : ''}`}>
+          {current && <span className={`lab-file-packet ${currentAlert?.severity === 'high' ? 'lab-file-alert' : ''}`} key={`${current.window}-${current.out_bytes}`} aria-label={`${prettyBytes(current.out_bytes)} outbound transfer${currentAlert ? `, ${currentAlert.severity} alert returned` : ''}`}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5L13.5 2Z"/><path d="M13 2v7h7M8 14h8M8 17h8"/></svg>
+            <b>{prettyBytes(current.out_bytes)}</b>
+          </span>}
+          <small>{current ? `${prettyBytes(current.out_bytes)} outbound` : 'Encrypted metadata flow'}</small>
+        </div>
+        <div className="lab-node"><span className="lab-node-icon">⇧</span><strong>{dest}</strong><small>{current?.primary_category || 'Destination pending'}</small></div>
+      </div>
+      <div className="lab-event-summary">
+        <span><b>Simulation time</b>{current?.window || '—'}</span><span><b>Outbound</b>{prettyBytes(current?.out_bytes)}</span>
+        <span><b>Inbound</b>{prettyBytes(current?.in_bytes)}</span><span><b>Connections</b>{current?.conn_count ?? '—'}</span>
+        <span><b>Seven-day total</b>{current ? prettyBytes(current.cum_out_7d) : '—'}</span>
+      </div>
+      <div className="lab-controls">
+        <button type="button" disabled={!result || loading} onClick={() => run(result.scenario, true)}>↻ Replay</button>
+        {playing ? <button type="button" onClick={pause}>Ⅱ Pause</button> : <button type="button" disabled={!result || index + 1 >= (result?.events?.length || 0)} onClick={resume}>▶ Resume</button>}
+        <button type="button" onClick={reset}>Reset</button>
+        <label>Speed <select value={speed} onChange={e => setSpeed(Number(e.target.value))}><option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option></select></label>
+        <label className="lab-toggle"><input type="checkbox" checked={showSignals} onChange={e => setShowSignals(e.target.checked)} /> Show detection signals</label>
+        <span className="lab-progress-label">{result ? `${Math.min(index + 1, result.event_count)} / ${result.event_count} events` : 'Ready'}</span>
+      </div>
+      <div className="lab-progress"><span style={{ width: `${progress}%` }} /></div>
+    </section>
 
-      {/* Alert Detail Modal */}
-      {selectedAlert && (
-        <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
-      )}
+    <div className="lab-lower-grid">
+      <section className="lab-stage-card lab-chart-card"><div className="lab-section-heading"><div><h2>Traffic timeline</h2><p>Outbound volume and seven-day cumulative volume from feature windows.</p></div></div>
+        {chart.length ? <div className="lab-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><defs><linearGradient id="labOut" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e99b36" stopOpacity={0.3}/><stop offset="100%" stopColor="#e99b36" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="#edf0f2"/><XAxis dataKey="window" tick={{fontSize:11}}/><YAxis tick={{fontSize:11}}/><Tooltip formatter={(v) => `${Number(v).toFixed(1)} MB`}/><Area type="monotone" dataKey="outbound" stroke="#d89232" fill="url(#labOut)" name="Outbound per window"/><Area type="monotone" dataKey="cumulative" stroke="#568c72" fill="none" name="Seven-day total"/></AreaChart></ResponsiveContainer></div> : <div className="lab-empty">Choose a scenario to load its prepared timeline.</div>}
+      </section>
+      <section className="lab-stage-card lab-detection"><div className="lab-section-heading"><div><h2>Detection result</h2><p>Risk score is not a probability of malicious intent.</p></div></div>
+        {risk !== undefined ? <><div className="lab-risk"><strong>{risk}</strong><span>/ 100 risk score · <b>{severity}</b></span></div><div className="lab-bands">Info 0–39 <i/> Review 40–69 <i/> High 70–100</div></> : <div className="lab-empty">{current ? 'No alert returned for this event window.' : 'Detection result appears as the replay reaches a scored event.'}</div>}
+        {showSignals && <div className="lab-signals">{SIGNALS.map(([key, label, max]) => { const signal = signals.find(s => s.name === key); return <div className="lab-signal" key={key}><span><b>{label}</b><small>{signal?.detail || (currentAlert ? 'Evaluated; no contribution reported.' : 'Not yet returned for this window.')}</small></span><strong>{signal ? `${signal.points}/${max}` : `—/${max}`}</strong></div> })}</div>}
+        {currentAlert && <button className="lab-evidence-button" type="button" onClick={() => setSelectedAlert(currentAlert)}>Open backend evidence card</button>}
+      </section>
     </div>
-  )
+      </div>
+    </div>
+    {selectedAlert && <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} />}
+  </div>
 }

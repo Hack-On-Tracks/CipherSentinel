@@ -14,7 +14,8 @@ MITRE ATT&CK T1567 · Hackathon Prototype
 # Install Python deps (Python 3.11+ recommended)
 pip install -r requirements.txt
 
-# Generate synthetic data, train model, score all windows
+# Explicitly prepare the deterministic synthetic dataset, train the model,
+# and materialize feature windows and scored alerts. Run once per seed/change.
 python run_pipeline.py
 
 # Start the FastAPI server
@@ -32,6 +33,23 @@ npm run dev
 ```
 
 The Vite dev server proxies `/api` to `localhost:8000` automatically.
+
+### Prepared data and scenario replay
+
+`python run_pipeline.py` is the explicit preparation command. It uses seed 42 by
+default and writes the 30-day synthetic dataset, feature windows, baselines,
+model, and scored alerts into `data/`. These artifacts are ignored by Git and
+should be prepared during deployment build or once in a local checkout. API
+startup only loads the prepared feature, baseline, model, and alert artifacts;
+scenario replay, dashboard requests, browser refreshes, and Compare never call
+the generator or train the model. If artifacts are missing, the API returns a
+503 with the preparation command to run.
+
+Scenario playback reads tagged windows and their saved scoring results from the
+prepared artifacts. The frontend animates those returned rows at the selected
+speed; it does not create detection scores. S3 maps to HR user `U-019`, and S5
+maps to Sales user `U-024`, with the canonical mapping defined beside the
+scenario injectors in `ml/generate.py`.
 
 ---
 
