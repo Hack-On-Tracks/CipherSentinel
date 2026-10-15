@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+*.egg-info/
+
+# Data artefacts (regenerate with run_pipeline.py)
+data/*.csv
+data/*.json
+data/*.joblib
+data/*.parquet
+
+# Frontend build
+web/dist/
+web/node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp

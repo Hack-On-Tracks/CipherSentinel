@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ciphersentinel-api
+    env: python
+    buildCommand: |
+      pip install -r requirements.txt
+      python run_pipeline.py
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://ciphersentinel.vercel.app
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    plan: free
