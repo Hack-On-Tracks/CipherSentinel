@@ -1,13 +1,79 @@
 {
   "schema_version": 1,
   "organizations": [
-    {"id": "ORG-A", "name": "Organization A", "ca_id": "ORG-A-CA", "status": "active"},
-    {"id": "ORG-B", "name": "Organization B", "ca_id": "ORG-B-CA", "status": "external"}
+    {
+      "id": "ORG-A",
+      "name": "Organization A",
+      "ca_id": "ORG-A-CA",
+      "status": "active"
+    },
+    {
+      "id": "ORG-B",
+      "name": "Organization B",
+      "ca_id": "ORG-B-CA",
+      "status": "external"
+    }
   ],
   "devices": [
-    {"device_id": "ORG-A-DEVICE-001", "organization_id": "ORG-A", "asset_label": "LAPTOP-B4EE7HH6", "hostname": "LAPTOP-B4EE7HH6", "hostname_source": "owner-provided", "os": "Windows", "certificate_serial": null, "certificate_sha256": null, "issuing_ca": "ORG-A-CA", "not_before": null, "not_after": null, "enrollment_status": "pending", "lifecycle_status": "active"},
-    {"device_id": "ORG-A-DEVICE-002", "organization_id": "ORG-A", "asset_label": "LAPTOP-3PPEMVCS", "hostname": "LAPTOP-3PPEMVCS", "hostname_source": "owner-provided", "os": "Windows", "certificate_serial": null, "certificate_sha256": null, "issuing_ca": "ORG-A-CA", "not_before": null, "not_after": null, "enrollment_status": "pending", "lifecycle_status": "active"},
-    {"device_id": "ORG-A-DEVICE-003", "organization_id": "ORG-A", "asset_label": "Malavya’s MacBook Air", "hostname": "Malavyas-MacBook-Air.local", "hostname_source": "observed-on-admin-Mac", "os": "macOS", "certificate_serial": null, "certificate_sha256": null, "issuing_ca": "ORG-A-CA", "not_before": null, "not_after": null, "enrollment_status": "pending", "lifecycle_status": "active"},
-    {"device_id": "ORG-B-DEVICE-001", "organization_id": "ORG-B", "asset_label": "Rainamishra-23", "hostname": "Rainamishra-23", "hostname_source": "owner-provided", "os": "Windows", "certificate_serial": null, "certificate_sha256": null, "issuing_ca": "ORG-B-CA", "not_before": null, "not_after": null, "enrollment_status": "pending", "lifecycle_status": "active"}
+    {
+      "device_id": "ORG-A-DEVICE-001",
+      "organization_id": "ORG-A",
+      "asset_label": "LAPTOP-B4EE7HH6",
+      "hostname": "LAPTOP-B4EE7HH6",
+      "hostname_source": "owner-provided",
+      "os": "Windows",
+      "certificate_serial": null,
+      "certificate_sha256": null,
+      "issuing_ca": "ORG-A-CA",
+      "not_before": null,
+      "not_after": null,
+      "enrollment_status": "pending",
+      "lifecycle_status": "active"
+    },
+    {
+      "device_id": "ORG-A-DEVICE-002",
+      "organization_id": "ORG-A",
+      "asset_label": "LAPTOP-3PPEMVCS",
+      "hostname": "LAPTOP-3PPEMVCS",
+      "hostname_source": "observed-during-enrollment",
+      "os": "Windows 10 Home Single Language 25H2 (10.0.26200.9457)",
+      "certificate_serial": null,
+      "certificate_sha256": null,
+      "issuing_ca": "ORG-A-CA",
+      "not_before": null,
+      "not_after": null,
+      "enrollment_status": "csr-pending-admin-approval",
+      "lifecycle_status": "active"
+    },
+    {
+      "device_id": "ORG-A-DEVICE-003",
+      "organization_id": "ORG-A",
+      "asset_label": "Malavya’s MacBook Air",
+      "hostname": "Malavyas-MacBook-Air.local",
+      "hostname_source": "observed-on-admin-Mac",
+      "os": "macOS",
+      "certificate_serial": null,
+      "certificate_sha256": null,
+      "issuing_ca": "ORG-A-CA",
+      "not_before": null,
+      "not_after": null,
+      "enrollment_status": "pending",
+      "lifecycle_status": "active"
+    },
+    {
+      "device_id": "ORG-B-DEVICE-001",
+      "organization_id": "ORG-B",
+      "asset_label": "Rainamishra-23",
+      "hostname": "Rainamishra-23",
+      "hostname_source": "owner-provided",
+      "os": "Windows",
+      "certificate_serial": null,
+      "certificate_sha256": null,
+      "issuing_ca": "ORG-B-CA",
+      "not_before": null,
+      "not_after": null,
+      "enrollment_status": "pending",
+      "lifecycle_status": "active"
+    }
   ]
 }
