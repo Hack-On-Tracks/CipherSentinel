@@ -1,5 +1,12 @@
 # CipherSentinel
 
+## Certificate enrollment lab
+
+The optional zero-cost multi-organization certificate enrollment workflow,
+pending device inventory, OpenSSL scripts, and FreeRADIUS lab guidance are in
+[`certlab/README.md`](certlab/README.md). It does not enable or claim live
+802.1X enforcement.
+
 **Insider threat detection from TLS metadata — no payload inspection.**
 
 MITRE ATT&CK T1567 · Hackathon Prototype

@@ -36,7 +36,7 @@ export default function ReplayPage() {
 
   const current = result?.events?.[index] || null
   const currentAlert = current?.alerts?.[0] || null
-  const isHighRiskEvent = currentAlert?.severity?.toLowerCase() === 'high'
+  const isOverFileSizeThreshold = Number(current?.out_bytes || 0) > 40_000_000
   const chart = useMemo(() => (result?.events || []).slice(0, index + 1).map((event, i) => ({
     window: event.window?.replace('T', ' ').slice(5, 16) || `${i + 1}`,
     outbound: Number(event.out_bytes || 0) / 1e6,
@@ -46,11 +46,11 @@ export default function ReplayPage() {
   useEffect(() => {
     if (!playing || !result) return undefined
     if (index + 1 >= result.events.length) { setPlaying(false); return undefined }
-    // Let a high-risk file finish its crossing even when the user selected 2×/4×.
-    const delay = isHighRiskEvent ? 1250 : 1050 / speed
+    // Let an over-threshold file finish its crossing even at 2×/4×.
+    const delay = isOverFileSizeThreshold ? 1250 : 1050 / speed
     const timer = window.setTimeout(() => setIndex(v => v + 1), delay)
     return () => window.clearTimeout(timer)
-  }, [playing, result, index, speed, isHighRiskEvent])
+  }, [playing, result, index, speed, isOverFileSizeThreshold])
 
   const run = async (scenario, replay = false) => {
     if (lockRef.current) return
@@ -112,7 +112,7 @@ export default function ReplayPage() {
       <div className="lab-flow">
         <div className="lab-node"><span className="lab-node-icon">▣</span><strong>{result?.entity || 'Synthetic device'}</strong><small>{result?.role || 'Select a scenario'}</small></div>
         <div className={`lab-connection ${current ? 'flow-active' : ''} ${Number(current?.out_bytes || 0) >= 1e9 ? 'flow-xlarge' : Number(current?.out_bytes || 0) >= 1e8 ? 'flow-large' : ''}`}>
-          {current && <span className={`lab-file-packet ${isHighRiskEvent ? 'lab-file-alert' : ''}`} key={`${current.window}-${current.out_bytes}`} aria-label={`${prettyBytes(current.out_bytes)} outbound transfer${currentAlert ? `, ${currentAlert.severity} alert returned` : ''}`}>
+          {current && <span className={`lab-file-packet ${isOverFileSizeThreshold ? 'lab-file-alert' : ''}`} key={`${current.window}-${current.out_bytes}`} aria-label={`${prettyBytes(current.out_bytes)} outbound transfer${currentAlert ? `, ${currentAlert.severity} alert returned` : ''}`}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.5L13.5 2Z"/><path d="M13 2v7h7M8 14h8M8 17h8"/></svg>
             <b>{prettyBytes(current.out_bytes)}</b>
           </span>}

@@ -1,0 +1,15 @@
+private/
+requests/
+issued/
+revoked/
+__pycache__/
+*.key
+*.pem
+*.csr
+*.srl
+*.crl
+*.p12
+*.pfx
+*.db
+*.attr
+*.old
