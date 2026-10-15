@@ -2,9 +2,9 @@
 score.py  -  Auditable five-signal fusion. It never reads encrypted payload bytes.
 
 Computes a 0-100 risk score from five auditable signals with fixed weights:
-  1. Self-baseline deviation (30)
-  2. Destination policy & novelty (25)
-  3. Isolation Forest metadata anomaly (20)
+  1. Isolation Forest metadata anomaly (40)
+  2. Self-baseline deviation (20)
+  3. Destination policy & novelty (15)
   4. Peer-group cohort deviation (15)
   5. Slow-leak 7-day accumulator (10)
 
@@ -96,11 +96,11 @@ def _baseline_out(row: pd.Series, user_bl: dict) -> float:
     return float(item.get("median", 0.0))
 
 
-def _iso(row: pd.Series, model, scaler, user_bl: dict) -> float:
+def _iso(row: pd.Series, model, scaler, user_bl: dict, peer_bl: dict) -> float:
     if model is None or scaler is None:
         return 0.0
     try:
-        norm_mat = normalise_features(pd.DataFrame([row]), user_bl)
+        norm_mat = normalise_features(pd.DataFrame([row]), user_bl, peer_bl)
         scaled_mat = scaler.transform(norm_mat)
         value = float(model.decision_function(scaled_mat)[0])
         # Map decision score into 0..1 range
@@ -153,7 +153,7 @@ def score_window(
     policy_weight = DEST_POLICY_WEIGHTS.get(category, 0.4) + (0.2 if first and category != "sanctioned" else 0.0)
     policy_points = WEIGHTS["destination_policy"] * min(1.0, policy_weight)
 
-    iso_value = _iso(row, model, scaler, user_bl)
+    iso_value = _iso(row, model, scaler, user_bl, peer_bl)
     iso_points = WEIGHTS["isolation_forest"] * iso_value
 
     cumulative = float(row.get("cum_out_7d", 0))

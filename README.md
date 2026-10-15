@@ -72,8 +72,8 @@ the generator or train the model. If artifacts are missing, the API returns a
 
 Scenario playback reads tagged windows and their saved scoring results from the
 prepared artifacts. The frontend animates those returned rows at the selected
-speed; it does not create detection scores. S3 maps to HR user `U-019`, and S5
-maps to Sales user `U-024`, with the canonical mapping defined beside the
+speed; it does not create detection scores. S2 maps to HR user `U-019`, and S3
+maps to Finance user `U-009`, with the canonical mapping defined beside the
 scenario injectors in `ml/generate.py`.
 
 ---
@@ -84,7 +84,7 @@ scenario injectors in `ml/generate.py`.
 CipherSentinel/
 ├── ml/
 │   ├── ingest.py     # Zeek (conn.log/ssl.log TSV & JSON) + Flow CSV ingestion
-│   ├── generate.py   # Synthetic users + 6 labelled scenarios (deterministic demo)
+│   ├── generate.py   # Synthetic users + 4 priority scenarios (deterministic demo)
 │   ├── features.py   # Flows → 15-min / 24-h entity windows
 │   ├── baseline.py   # Median/MAD self + peer-group baselines (leakage-prevented)
 │   ├── train.py      # Isolation Forest on normalised features (benign only)
@@ -121,9 +121,9 @@ For offline PCAP extraction, identity mapping, and evaluation methodology, see [
 
 | Signal | Weight |
 |--------|--------|
-| Self-baseline deviation (median/MAD z-score) | 30 |
-| Destination policy (category + novelty) | 25 |
-| Isolation Forest (on normalised features) | 20 |
+| Isolation Forest (17 normalized behavior features) | 40 |
+| Self-baseline deviation (median/MAD z-score) | 20 |
+| Destination policy (category + novelty) | 15 |
 | Peer-group deviation (role cohort) | 15 |
 | Slow-leak accumulator (7-day rolling) | 10 |
 
@@ -133,12 +133,12 @@ Severity: **0–39 Info · 40–69 Review · 70–100 High**
 
 | ID | Scenario | Expected |
 |----|----------|----------|
-| S1 | Legitimate heavy uploader (engineer, 2 GB builds) | No alert |
-| S2 | 400 MB midnight upload to mega.nz | High alert |
-| S3 | 40 MB/day for 10 days to wetransfer.com | Alert mid-period |
-| S4 | Finance user + sync-tool JA4 + anonymiser | Review/High |
-| S5 | Departing employee ramp over 2 weeks | Alert before final days |
-| S6 | New laptop 3 GB first-day cloud sync (hard negative) | At most Review |
+| S1 | Finance user, 400 MB at 02:00 to a new destination, region, port, and client | High-risk multivariate anomaly |
+| S2 | HR user, 60 MB/day for 8 days, below the 100 MB/window threshold | Cumulative and behavioral anomaly builds over time |
+| S3 | Finance user, repeated transfer via rare JA4, new region, and port | High-risk channel-evasion pattern |
+| S4 | Engineer, repeated 3 GB sanctioned release during normal hours | Review only in the reference replay; no high alerts |
+
+Each scenario includes an Isolation Forest feature note explaining which inputs are exercised and what they measure. Isolation Forest contributes up to 40 points, more than any other single signal; the five signal weights still total 100.
 
 ## API contract
 

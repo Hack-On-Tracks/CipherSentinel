@@ -2,7 +2,7 @@
 generate.py  -  Synthetic Zeek-style flow generator for CipherSentinel.
 
 Produces 30 pseudonymous users across five roles over 30 days.
-Injects six labelled scenarios (S1-S6) with full ground-truth labels.
+Injects four priority-ordered scenarios (S1-S4) with full ground-truth labels.
 Outputs: data/flows.csv  and  data/ground_truth.csv
 """
 
@@ -67,8 +67,7 @@ DAYS = 30
 # Canonical scenario-to-entity mapping, kept beside the injectors that define
 # each scenario so the API and generator cannot drift independently.
 SCENARIO_USERS = {
-    "S1": "U-000", "S2": "U-008", "S3": "U-019",
-    "S4": "U-009", "S5": "U-024", "S6": "U-002",
+    "S1": "U-008", "S2": "U-019", "S3": "U-009", "S4": "U-000",
 }
 
 def build_users():
@@ -109,6 +108,7 @@ def gen_normal_flow(user, ts, label="benign"):
     in_bytes  = lognormal_bytes(cfg["upload_mb_median"] * 5, cfg["upload_mb_mad"] * 5)
     duration  = rng.uniform(1, 300)
     ja4 = JA4_BROWSER if rng.random() < 0.9 else JA4_CURL
+    region = "US" if rng.random() < 0.97 else "CA"
     return {
         "ts": ts.isoformat(),
         "user_id": user["user_id"],
@@ -120,6 +120,9 @@ def gen_normal_flow(user, ts, label="benign"):
         "in_bytes": in_bytes,
         "duration": round(duration, 2),
         "ja4": ja4,
+        "dst_port": int(rng.choice([443, 443, 443, 443, 80, 8443])),
+        "dest_region": region,
+        "dest_country": region,
         "label": label,
         "scenario": None,
     }
@@ -140,94 +143,92 @@ def generate_baseline(users, days=DAYS):
             for _ in range(n_sessions):
                 hour = rng.integers(wh[0], wh[1])
                 minute = rng.integers(0, 60)
+                if user["user_id"] == SCENARIO_USERS["S4"] and hour in {9, 13, 17} and minute < 15:
+                    continue  # Keep regular release windows distinct from incidental flows.
                 ts = date + timedelta(hours=int(hour), minutes=int(minute))
                 rows.append(gen_normal_flow(user, ts))
+            if user["user_id"] == SCENARIO_USERS["S4"]:
+                # Establish repeated, known-good release behavior before the
+                # held-out S4 replay so high volume alone is not treated as theft.
+                for hour in [9, 13, 17]:
+                    ts = date + timedelta(hours=hour, minutes=5)
+                    release = gen_normal_flow(user, ts, label="benign")
+                    release.update({
+                        "out_bytes": int(3e9),
+                        "sni": "onedrive.live.com",
+                        "dest_category": "sanctioned",
+                        "dst_port": 443,
+                        "dest_region": "US",
+                        "dest_country": "US",
+                    })
+                    rows.append(release)
     return rows
 
 # ── scenario injectors ────────────────────────────────────────────────────────
 
 def inject_S1(users, rows):
-    """S1: Legitimate heavy uploader - engineer pushing builds. No alert expected."""
-    eng = [u for u in users if u["role"] == "engineer"][0]
-    for day in range(DAYS):
-        date = START_DATE + timedelta(days=day)
-        for hour in [9, 13, 17]:
-            ts = date + timedelta(hours=hour, minutes=rng.integers(0,30).item())
-            r  = gen_normal_flow(eng, ts, label="benign")
-            r["out_bytes"]   = int(2e9)  # 2 GB build artefact
-            r["sni"]         = "s3.amazonaws.com"
-            r["dest_category"] = "sanctioned"
-            r["scenario"]    = "S1"
-            rows.append(r)
-    return rows
-
-def inject_S2(users, rows):
-    """S2: Single 400 MB upload to personal storage at 02:00 - High alert."""
+    """Priority 1: high-volume, off-hours exfiltration over a new risky channel."""
     victim = [u for u in users if u["role"] == "finance"][0]
-    ts = START_DATE + timedelta(days=15, hours=2, minutes=14)
+    ts = START_DATE + timedelta(days=22, hours=2, minutes=14)
     r = gen_normal_flow(victim, ts, label="exfiltration")
     r["out_bytes"]      = int(4e8)  # 400 MB
     r["sni"]            = "mega.nz"
     r["dest_category"]  = "personal_file_sharing"
     r["ja4"]            = JA4_SYNC
-    r["scenario"]       = "S2"
+    r["dst_port"]       = 9443
+    r["dest_region"]    = "NL"
+    r["dest_country"]   = "NL"
+    r["scenario"]       = "S1"
     rows.append(r)
     return rows
 
-def inject_S3(users, rows):
-    """S3: Low-and-slow - 40 MB a day for 10 days to one destination."""
+def inject_S2(users, rows):
+    """Priority 2: 60 MB/day for eight days, below per-window threshold but high cumulatively."""
     victim = [u for u in users if u["role"] == "hr"][0]
-    for day in range(10, 20):
+    for day in range(22, 30):
         date = START_DATE + timedelta(days=day)
-        ts   = date + timedelta(hours=10, minutes=rng.integers(0,30).item())
+        ts   = date + timedelta(hours=20, minutes=rng.integers(0,30).item())
         r    = gen_normal_flow(victim, ts, label="exfiltration")
-        r["out_bytes"]     = int(40e6)  # 40 MB
+        r["out_bytes"]     = int(60e6)  # 60 MB
         r["sni"]           = "wetransfer.com"
         r["dest_category"] = "file_transfer"
+        r["dst_port"]       = 443
+        r["scenario"]      = "S2"
+        rows.append(r)
+    return rows
+
+def inject_S3(users, rows):
+    """Priority 3: covert channel evasion with a rare tool, port, and region."""
+    victim = [u for u in users if u["role"] == "finance"][1]
+    for day in range(23, 29):
+        date = START_DATE + timedelta(days=day)
+        ts   = date + timedelta(hours=14, minutes=rng.integers(0,30).item())
+        r    = gen_normal_flow(victim, ts, label="exfiltration")
+        r["out_bytes"]     = int(120e6)
+        r["sni"]           = "filebin.net"
+        r["dest_category"] = "anonymiser"
+        r["ja4"]           = JA4_SYNC
+        r["dst_port"]      = 4444
+        r["dest_region"]   = "RU"
+        r["dest_country"]  = "RU"
         r["scenario"]      = "S3"
         rows.append(r)
     return rows
 
 def inject_S4(users, rows):
-    """S4: Finance user using sync-tool JA4 to a new destination."""
-    victim = [u for u in users if u["role"] == "finance"][1]
-    for day in range(20, 25):
-        date = START_DATE + timedelta(days=day)
-        ts   = date + timedelta(hours=14, minutes=rng.integers(0,30).item())
-        r    = gen_normal_flow(victim, ts, label="exfiltration")
-        r["out_bytes"]     = int(80e6)
-        r["sni"]           = "anonfiles.com"
-        r["dest_category"] = "anonymiser"
-        r["ja4"]           = JA4_SYNC
+    """Hard negative: repeated large engineering releases on a familiar channel and schedule."""
+    victim = [u for u in users if u["role"] == "engineer"][0]
+    for day in range(22, 30):
+        ts = START_DATE + timedelta(days=day, hours=9, minutes=5)
+        r  = gen_normal_flow(victim, ts, label="benign")
+        r["out_bytes"]     = int(3e9)
+        r["sni"]           = "onedrive.live.com"
+        r["dest_category"] = "sanctioned"
+        r["dst_port"]      = 443
+        r["dest_region"]   = "US"
+        r["dest_country"]  = "US"
         r["scenario"]      = "S4"
         rows.append(r)
-    return rows
-
-def inject_S5(users, rows):
-    """S5: Departing employee - rising volume and new destinations over 2 weeks."""
-    victim = [u for u in users if u["role"] == "sales"][0]
-    for day in range(16, 30):
-        date = START_DATE + timedelta(days=day)
-        ts   = date + timedelta(hours=18, minutes=rng.integers(0,30).item())
-        r    = gen_normal_flow(victim, ts, label="exfiltration")
-        # volume ramps linearly
-        r["out_bytes"]     = int((day - 15) * 50e6)
-        r["sni"]           = random.choice(["mega.nz","transfer.sh","anonfiles.com"])
-        r["dest_category"] = "personal_file_sharing"
-        r["scenario"]      = "S5"
-        rows.append(r)
-    return rows
-
-def inject_S6(users, rows):
-    """S6: Hard negative - new laptop doing a 3 GB first-day cloud sync. At most review."""
-    victim = [u for u in users if u["role"] == "engineer"][2]
-    ts = START_DATE + timedelta(days=1, hours=9, minutes=5)
-    r  = gen_normal_flow(victim, ts, label="benign")
-    r["out_bytes"]     = int(3e9)
-    r["sni"]           = "onedrive.live.com"
-    r["dest_category"] = "sanctioned"
-    r["scenario"]      = "S6"
-    rows.append(r)
     return rows
 
 def main(seed=SEED, out_dir="data"):
@@ -243,8 +244,6 @@ def main(seed=SEED, out_dir="data"):
     rows = inject_S2(users, rows)
     rows = inject_S3(users, rows)
     rows = inject_S4(users, rows)
-    rows = inject_S5(users, rows)
-    rows = inject_S6(users, rows)
 
     df = pd.DataFrame(rows)
     df["ts"] = pd.to_datetime(df["ts"])
@@ -255,7 +254,7 @@ def main(seed=SEED, out_dir="data"):
     df.to_csv(flows_path, index=False)
     print(f"[generate] {len(df)} flows -> {flows_path}")
 
-    # This labels *all* scenario events; benign controls S1 and S6 remain explicit.
+    # This labels all four scenarios; S4 is the benign hard-negative control.
     gt = df[df["scenario"].notna()][["flow_id","user_id","ts","scenario","label","sni","out_bytes"]]
     gt_path = os.path.join(out_dir, "ground_truth.csv")
     gt.to_csv(gt_path, index=False)
@@ -270,7 +269,7 @@ def main(seed=SEED, out_dir="data"):
     manifest = {
         "dataset_id": f"synthetic_seed_{seed}",
         "source_type": "synthetic",
-        "provenance": "Synthetic Zeek-style flows (30 users, 5 roles, 30 days, S1-S6 scenarios)",
+        "provenance": "Synthetic Zeek-style flows (30 users, 5 roles, 30 days, four priority-ordered S1-S4 scenarios)",
         "license": "CC0-1.0 Public Domain (Generated Demo Telemetry)",
         "ingested_at": datetime.now(timezone.utc).isoformat(),
         "metadata_only_verified": True,
@@ -279,7 +278,7 @@ def main(seed=SEED, out_dir="data"):
         "entity_count": len(users),
         "time_range": {"start": str(df["ts"].min()), "end": str(df["ts"].max())},
         "label_availability": "synthetic_injected",
-        "scenario_ids": ["S1", "S2", "S3", "S4", "S5", "S6"],
+        "scenario_ids": ["S1", "S2", "S3", "S4"],
         "schema_mapping": {
             "flow_id": "Synthetic flow identifier",
             "ts": "Simulated connection timestamp",
@@ -293,7 +292,10 @@ def main(seed=SEED, out_dir="data"):
             "duration": "Connection duration in seconds",
             "ja4": "Client TLS fingerprint",
             "label": "benign | exfiltration",
-            "scenario": "S1-S6 or null"
+            "dst_port": "Destination service port",
+            "dest_region": "Synthetic destination region",
+            "dest_country": "Synthetic destination country",
+            "scenario": "S1-S4 or null"
         }
     }
     with open(manifest_path, "w", encoding="utf-8") as f:

@@ -6,9 +6,9 @@ from pathlib import Path
 
 # These are governance-controlled, not optimisation parameters.
 WEIGHTS = {
-    "self_deviation": 30,
-    "destination_policy": 25,
-    "isolation_forest": 20,
+    "self_deviation": 20,
+    "destination_policy": 15,
+    "isolation_forest": 40,
     "peer_deviation": 15,
     "slow_leak": 10,
 }
@@ -40,9 +40,9 @@ with _POLICY_PATH.open(encoding="utf-8") as _f:
 
 # ── Optional Sixth Parameter / Extension Signal Hook ──────────────────────────
 # The canonical CipherSentinel model defines five fixed signals totaling 100 points:
-#   1. self_deviation (30)
-#   2. destination_policy (25)
-#   3. isolation_forest (20)
+#   1. self_deviation (20)
+#   2. destination_policy (15)
+#   3. isolation_forest (40)
 #   4. peer_deviation (15)
 #   5. slow_leak (10)
 # Note: The repository does not define a static "sixth parameter". If an organization

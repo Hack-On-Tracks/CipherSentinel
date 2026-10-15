@@ -11,10 +11,10 @@ const PERFORMANCE_DATA = [
 ]
 
 const DAYS_TO_ALERT_DATA = [
-  { name: 'A - Threshold', s3: 0, s3Missed: true, s5: 12 },
-  { name: 'B - Raw IF', s3: 20, s3Missed: false, s5: 8 },
-  { name: 'C - Baselines Only', s3: 10, s3Missed: false, s5: 5 },
-  { name: 'D - CipherSentinel', s3: 5, s3Missed: false, s5: 3 },
+  { name: 'A - Threshold', s2: 0, s2Missed: true, s3: 5 },
+  { name: 'B - Raw IF', s2: 20, s2Missed: false, s3: 4 },
+  { name: 'C - Baselines Only', s2: 10, s2Missed: false, s3: 3 },
+  { name: 'D - CipherSentinel', s2: 5, s2Missed: false, s3: 2 },
 ]
 
 const DETAILED_METRICS_DATA = [
@@ -30,9 +30,9 @@ const DETAILED_METRICS_DATA = [
     recall: '40.0%',
     f1: '36.4%',
     faUserWk: '0.44',
-    daysS3: 'X Missed',
-    s3Color: 'text-red',
-    daysS5: '12',
+    daysS2: 'X Missed',
+    s2Color: 'text-red',
+    daysS3: '12',
   },
   {
     method: 'B - Raw IF',
@@ -46,9 +46,9 @@ const DETAILED_METRICS_DATA = [
     recall: '60.0%',
     f1: '42.9%',
     faUserWk: '0.67',
-    daysS3: '20',
-    s3Color: '',
-    daysS5: '8',
+    daysS2: '20',
+    s2Color: '',
+    daysS3: '8',
   },
   {
     method: 'C - Baselines Only',
@@ -62,9 +62,9 @@ const DETAILED_METRICS_DATA = [
     recall: '80.0%',
     f1: '72.7%',
     faUserWk: '0.22',
-    daysS3: '10',
-    s3Color: '',
-    daysS5: '5',
+    daysS2: '10',
+    s2Color: '',
+    daysS3: '5',
   },
   {
     method: 'D - CipherSentinel',
@@ -81,10 +81,10 @@ const DETAILED_METRICS_DATA = [
     f1Color: 'text-green',
     faUserWk: '0.11',
     faColor: 'text-green',
-    daysS3: '5',
+    daysS2: '5',
+    s2Color: 'text-green',
+    daysS3: '3',
     s3Color: 'text-green',
-    daysS5: '3',
-    s5Color: 'text-green',
   },
 ]
 
@@ -236,8 +236,8 @@ export default function ComparePage() {
                 <span className="compare-chart-title">Days to First Alert</span>
               </div>
               <div className="days-legend">
-                <span className="legend-item"><span className="legend-box" style={{ background: '#A7F3D0' }} />S3 (Low-and-Slow)</span>
-                <span className="legend-item"><span className="legend-box" style={{ background: '#FDE68A' }} />S5 (Departing Employee)</span>
+                <span className="legend-item"><span className="legend-box" style={{ background: '#A7F3D0' }} />S2 (Low-and-Slow)</span>
+                <span className="legend-item"><span className="legend-box" style={{ background: '#FDE68A' }} />S3 (Channel Evasion)</span>
               </div>
             </div>
             <div className="compare-chart-sub">Lower is better. <span style={{ color: '#EF4444', fontWeight: 600 }}>✕ Missed</span> = never alerted on that scenario.</div>
@@ -250,12 +250,12 @@ export default function ComparePage() {
                 <XAxis dataKey="name" tick={{ fill: '#6B7D72', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 30]} ticks={[0, 10, 20, 30]} tick={{ fill: '#6B7D72', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  formatter={(v, name) => [`${v} days`, name === 's3' ? 'S3' : 'S5']}
+                  formatter={(v, name) => [`${v} days`, name === 's2' ? 'S2' : 'S3']}
                   contentStyle={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 11 }}
                 />
                 <Bar
-                  dataKey="s3"
-                  name="S3 (Low-and-Slow)"
+                  dataKey="s2"
+                  name="S2 (Low-and-Slow)"
                   fill="#A7F3D0"
                   radius={[4, 4, 0, 0]}
                   barSize={20}
@@ -267,8 +267,8 @@ export default function ComparePage() {
                   }}
                 />
                 <Bar
-                  dataKey="s5"
-                  name="S5 (Departing Employee)"
+                  dataKey="s3"
+                  name="S3 (Channel Evasion)"
                   fill="#FDE68A"
                   radius={[4, 4, 0, 0]}
                   barSize={20}
@@ -321,8 +321,8 @@ export default function ComparePage() {
                 <th>RECALL</th>
                 <th>F1</th>
                 <th>FA/USER/WK</th>
+                <th>DAYS → S2</th>
                 <th>DAYS → S3</th>
-                <th>DAYS → S5</th>
               </tr>
             </thead>
             <tbody>
@@ -342,8 +342,8 @@ export default function ComparePage() {
                   <td className={row.recColor || ''}>{row.recall}</td>
                   <td className={row.f1Color || ''}>{row.f1}</td>
                   <td className={row.faColor || ''}>{row.faUserWk}</td>
+                  <td className={row.s2Color || ''}>{row.daysS2}</td>
                   <td className={row.s3Color || ''}>{row.daysS3}</td>
-                  <td className={row.s5Color || ''}>{row.daysS5}</td>
                 </tr>
               ))}
             </tbody>

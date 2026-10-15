@@ -2,98 +2,96 @@ import React, { useState } from 'react'
 import { ShieldAlert, CheckCircle2, Activity, ArrowRight, Laptop, Users, Globe } from '../icons/LucideIcons.jsx'
 
 export default function ScenariosSection({ onLaunchDashboard, onReplayScenario }) {
-  const [activeScenarioId, setActiveScenarioId] = useState('S2')
+  const [activeScenarioId, setActiveScenarioId] = useState('S1')
 
   const scenarios = [
     {
-      id: 'S2',
-      tag: 'Critical Threat',
-      title: 'Midnight Exfiltration to Mega.nz',
+      id: 'S1',
+      tag: 'Priority 1 · Burst Exfiltration',
+      title: 'Off-Hours Upload Through a New Channel',
       entity: 'U-008 (Finance Analyst)',
       volume: '400 MB Burst',
       time: '02:00 AM (Off-hours)',
       destination: 'mega.nz (Personal File Sharing)',
-      riskScore: 87,
+      riskScore: 92,
       severity: 'high',
-      expected: 'High Alert (Score 87)',
-      details: 'A finance employee uploads 400 MB at 2:00 AM to a newly encountered personal storage service. The upload is 61x their historical median (z = 61.0). High-entropy bursts and novelty score trigger immediate SOC escalation.',
+      expected: 'High Alert (illustrative score 92)',
+      details: 'A finance employee uploads 400 MB at 2:00 AM to a new personal storage destination using an unusual port and a rare sync-tool fingerprint. Several independent behavioral dimensions are anomalous at once.',
       verdict: 'Escalate to security team; verify with manager before access restriction.',
-      signalsTriggered: ['Self-baseline (z=61.0)', 'Destination policy (mega.nz)', 'Isolation Forest (0.90)', 'Off-hours burst'],
+      signalsTriggered: ['Isolation Forest (40-point maximum)', 'User and peer deviation', 'Destination/port novelty', 'Off-hours activity'],
+      isoInputs: [
+        ['out_bytes_log + byte_asymmetry', 'Flags a large upload-heavy burst.'],
+        ['out_z + peer_z', 'Measures how far the upload departs from this user and finance peers.'],
+        ['new_dest_user + bytes_to_novel_dst_log', 'Captures first contact and the volume sent to it.'],
+        ['is_off_hours + active_hours_dev', 'Finds activity outside the user’s normal schedule.'],
+        ['novel_dst_port + ja4_rare', 'Highlights an unfamiliar service port and rare client fingerprint.'],
+      ],
+    },
+    {
+      id: 'S2',
+      tag: 'Priority 2 · Cumulative Exfiltration',
+      title: 'Low-and-Slow Transfer Across Eight Days',
+      entity: 'U-019 (HR Specialist)',
+      volume: '60 MB / day for 8 days',
+      time: '20:00 (Off-hours)',
+      destination: 'wetransfer.com (Repeated transfer)',
+      riskScore: 78,
+      severity: 'review',
+      expected: 'Review / High as evidence accumulates',
+      details: 'An HR user sends 60 MB per day to the same external file-transfer service at 20:00. Each transfer stays below a 100 MB/window threshold; rolling volume and repeated off-hours behavior build the anomaly over time.',
+      verdict: 'Investigate transfer authorization with HR leadership.',
+      signalsTriggered: ['Isolation Forest (40-point maximum)', 'cum_out_7d_mb_log', 'out_z + peer_z', 'active_hours_dev'],
+      isoInputs: [
+        ['cum_out_7d_mb_log', 'Tracks repeated egress that stays below a one-window threshold.'],
+        ['out_z + peer_z', 'Compares each daily transfer with the user and role cohort.'],
+        ['new_dest_user + category_risk', 'Adds context for a new file-transfer destination.'],
+        ['is_off_hours + active_hours_dev', 'Measures timing irregularity across the sequence.'],
+        ['conn_count_log + byte_asymmetry', 'Describes transfer cadence and upload-heavy direction.'],
+      ],
     },
     {
       id: 'S3',
-      tag: 'Low-and-Slow Leak',
-      title: 'Stealthy 10-Day WeTransfer Exfil',
-      entity: 'U-019 (HR Specialist)',
-      volume: '40 MB / day for 10 days',
-      time: '10:00 AM (Standard hours)',
-      destination: 'wetransfer.com (One-time transfer)',
-      riskScore: 55,
-      severity: 'review',
-      expected: 'Mid-Period Alert',
-      details: 'To evade single-flow burst thresholds, the user limits each transfer to 40 MB during business hours. The 7-day slow-leak accumulator identifies the cumulative outbound drift, triggering an alert on day 5.',
-      verdict: 'Investigate transfer authorization with HR leadership.',
-      signalsTriggered: ['7-day accumulator (400 MB)', 'Peer-group deviation (z=6.0)', 'Destination policy'],
+      tag: 'Priority 3 · Channel Evasion',
+      title: 'Rare Client, Port, and Destination Region',
+      entity: 'U-009 (Finance Controller)',
+      volume: '120 MB repeated over five days',
+      time: '14:00 (unfamiliar channel)',
+      destination: 'filebin.net (new region, port 4444)',
+      riskScore: 88,
+      severity: 'high',
+      expected: 'High Alert (illustrative score 88)',
+      details: 'A finance user repeatedly sends data to an anonymising file host from a new destination region, using a rare client fingerprint and a previously unseen high port. The volume is moderate, so context and behavior matter more than a size threshold.',
+      verdict: 'Escalate to security team; investigate endpoint software inventory.',
+      signalsTriggered: ['Isolation Forest (40-point maximum)', 'ja4_rare + novel_dst_port', 'new_region_and_destination', 'category_risk'],
+      isoInputs: [
+        ['ja4_rare', 'Detects a client TLS fingerprint rarely seen in the environment.'],
+        ['novel_dst_port + risky_dst_port_share', 'Identifies a new or unusual destination service port.'],
+        ['new_region_and_destination', 'Marks a first-seen destination in a new geography.'],
+        ['new_dest_user + bytes_to_novel_dst_log', 'Measures novelty and outbound volume to that channel.'],
+        ['out_z + peer_z + category_risk', 'Adds user, role, and destination-risk context.'],
+      ],
     },
     {
       id: 'S4',
-      tag: 'Tool Evasion',
-      title: 'Sync-Tool JA4 & Anonymizer',
-      entity: 'U-009 (Finance Controller)',
-      volume: '250 MB Outbound',
-      time: '14:15 PM',
-      destination: 'drive.google.com (Unusual Account)',
-      riskScore: 74,
-      severity: 'high',
-      expected: 'Review / High Alert',
-      details: 'The user utilizes an unapproved sync tool. The client TLS Client Hello JA4 fingerprint matches known exfiltration utilities rather than standard corporate browsers.',
-      verdict: 'Escalate to security team; investigate endpoint software inventory.',
-      signalsTriggered: ['JA4 fingerprint anomaly', 'Self-deviation (z=15.0)', 'Volume deviation'],
-    },
-    {
-      id: 'S5',
-      tag: 'Departing Insider',
-      title: 'Departing Employee 2-Week Ramp',
-      entity: 'U-024 (Sales Director)',
-      volume: 'Exponential Egress Ramp',
-      time: 'Evenings & Weekends',
-      destination: 'Dropbox & Box endpoints',
+      tag: 'Hard Negative · Legitimate Activity',
+      title: 'Large Sanctioned Engineering Release',
+      entity: 'U-000 (Engineer)',
+      volume: '3 GB release repeated on a known channel',
+      time: '09:05 AM (Working hours)',
+      destination: 'onedrive.live.com (Sanctioned)',
       riskScore: 68,
       severity: 'review',
-      expected: 'Pre-Exit Detection',
-      details: 'Sales director after submitting resignation progressively copies client rosters and contracts. The progressive volume ramp violates peer-group benchmarks 6 days before their final work day.',
-      verdict: 'Review egress audit trail with legal and HR prior to exit interview.',
-      signalsTriggered: ['Peer cohort divergence', 'Accumulative drift', 'Off-schedule activity'],
-    },
-    {
-      id: 'S1',
-      tag: 'Hard Negative (Clean)',
-      title: 'Heavy Developer 2 GB Daily Builds',
-      entity: 'U-003 (Senior DevOps)',
-      volume: '2.4 GB Docker Images',
-      time: '16:30 PM (Working hours)',
-      destination: 'ecr.aws.com / docker.io',
-      riskScore: 18,
-      severity: 'clean',
-      expected: 'No Alert (Clean Suppression)',
-      details: 'Developers routinely push large multi-gigabyte build artifacts. Static threshold systems raise daily false alarms. CipherSentinel peer-group cohort modeling recognizes this as routine for engineering.',
-      verdict: 'Normal engineering operation. Baseline updated; zero alert noise.',
-      signalsTriggered: ['Peer cohort matches Engineering median', 'Sanctioned corporate destination'],
-    },
-    {
-      id: 'S6',
-      tag: 'Hard Negative (Clean)',
-      title: 'New Laptop 3 GB First-Day Onboarding',
-      entity: 'U-012 (New Hire - Marketing)',
-      volume: '3.1 GB Initial Cloud Sync',
-      time: '09:30 AM (Day 1)',
-      destination: 'onedrive.microsoft.com',
-      riskScore: 32,
-      severity: 'clean',
-      expected: 'Clean / Low Risk',
-      details: 'A newly provisioned corporate laptop syncs corporate OneDrive files on day 1. The system identifies sanctioned corporate tenant SNI and onboarding window flags, preventing false alarm fatigue.',
-      verdict: 'Approved corporate sync. No security action required.',
-      signalsTriggered: ['Sanctioned corporate tenant', 'Low destination risk'],
+      expected: 'Review only (no high alerts in replay)',
+      details: 'An engineer repeats a 3 GB release during normal hours to an established sanctioned service over port 443. The multivariate Isolation Forest still contributes points, but the combined score stays below the high-severity threshold. This is a calibration control for legitimate high-volume work.',
+      verdict: 'Review the established release profile; no urgent restriction or escalation.',
+      signalsTriggered: ['Isolation Forest: 32.8 / 40', 'Established destination and port', 'Normal active hours', 'Combined risk remains below 70'],
+      isoInputs: [
+        ['out_bytes_log', 'Sees the large transfer, then evaluates it with the other behavior.'],
+        ['out_z + peer_z', 'Checks that this volume fits the engineer’s own and peer patterns.'],
+        ['new_dest_user + new_dest_org', 'Confirms the release uses an established destination.'],
+        ['is_off_hours + active_hours_dev', 'Confirms the activity occurs during the usual work schedule.'],
+        ['novel_dst_port + category_risk', 'Confirms the channel and service category are expected.'],
+      ],
     },
   ]
 
@@ -113,7 +111,7 @@ export default function ScenariosSection({ onLaunchDashboard, onReplayScenario }
             Battle-Tested Against Real Insider Vectors
           </h2>
           <p className="section-subtitle">
-            Explore the 6 deterministic synthetic scenarios evaluated across 30 days of enterprise network telemetry, testing both malicious exfiltration and hard-negative suppression.
+            Explore three priority-ordered exfiltration patterns and one legitimate high-volume control. Isolation Forest carries 40 of the 100 risk points; each scenario shows which model inputs explain its behavior.
           </p>
         </div>
 
@@ -177,6 +175,13 @@ export default function ScenariosSection({ onLaunchDashboard, onReplayScenario }
           <div className="sc-narrative-box">
             <div className="narrative-heading">Detection Narrative & Analysis:</div>
             <p className="narrative-text">{active.details}</p>
+          </div>
+
+          <div className="sc-narrative-box">
+            <div className="narrative-heading">Isolation Forest inputs used:</div>
+            <ul className="narrative-text">
+              {active.isoInputs.map(([feature, purpose]) => <li key={feature}><strong>{feature}</strong> — {purpose}</li>)}
+            </ul>
           </div>
 
           <div className="sc-signals-footer">

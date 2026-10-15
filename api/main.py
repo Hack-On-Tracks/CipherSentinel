@@ -32,12 +32,10 @@ MODEL_PATH = Path(os.getenv("CIPHERSENTINEL_MODEL_PATH", str(DATA_DIR / "model.j
 SCALER_PATH = Path(os.getenv("CIPHERSENTINEL_SCALER_PATH", str(DATA_DIR / "scaler.joblib"))).expanduser().resolve()
 CERT_INVENTORY_PATH = BASE_DIR / "certlab" / "inventory.json"
 SCENARIOS = [
-    {"id": "S1", "name": "Legitimate heavy uploader (engineer)", "expected": "No alert"},
-    {"id": "S2", "name": "Single 400 MB upload at 02:00", "expected": "High alert"},
-    {"id": "S3", "name": "Low-and-slow: 40 MB/day for 10 days", "expected": "Alert mid-period"},
-    {"id": "S4", "name": "Finance + sync tool + new destination", "expected": "Review/High"},
-    {"id": "S5", "name": "Departing employee ramp", "expected": "Alert before final days"},
-    {"id": "S6", "name": "New laptop cloud sync (hard negative)", "expected": "At most Review"},
+    {"id": "S1", "name": "Off-hours high-volume exfiltration", "expected": "High risk: multi-feature anomaly"},
+    {"id": "S2", "name": "Low-and-slow cumulative leak", "expected": "Review/high as behavior accumulates"},
+    {"id": "S3", "name": "Rare tool and destination-port evasion", "expected": "High risk: channel anomaly"},
+    {"id": "S4", "name": "Legitimate engineering release", "expected": "Review only; no high alerts in the reference replay"},
     {"id": "ALL", "name": "Full 30-day stream", "expected": "All scenarios"},
 ]
 
@@ -410,7 +408,7 @@ def scenario_replay(scenario_id: str):
     """Return the deterministic, precomputed scenario event sequence and alerts."""
     _require_loaded()
     if scenario_id not in SCENARIO_USERS:
-        raise HTTPException(404, "Unknown scenario. Choose S1 through S6.")
+        raise HTTPException(404, "Unknown scenario. Choose S1 through S4.")
     entity_id = SCENARIO_USERS[scenario_id]
     role = "unknown"
     events: list[dict[str, Any]] = []

@@ -12,7 +12,7 @@ export default function BenchmarkSection() {
       isHighlight: true,
     },
     {
-      feature: 'False Positive Rate on Developer Builds (S1)',
+      feature: 'False Positive Rate on Developer Builds (S4)',
       methodA: 'Daily Alarms (Fail)',
       methodB: '18.4% (Noisy)',
       methodC: '3.2%',
@@ -20,7 +20,7 @@ export default function BenchmarkSection() {
       isHighlight: true,
     },
     {
-      feature: 'Low-and-Slow Leak Detection (S3)',
+      feature: 'Low-and-Slow Leak Detection (S2)',
       methodA: '0% (Missed)',
       methodB: '22.0% (Delayed)',
       methodC: '15.0%',

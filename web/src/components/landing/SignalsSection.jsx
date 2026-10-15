@@ -14,7 +14,7 @@ export default function SignalsSection({ onLaunchDashboard }) {
   const signalsMeta = [
     {
       id: 'self',
-      weight: 30,
+      weight: 20,
       title: 'Self-Baseline Deviation',
       formula: 'Robust z-score via median / MAD',
       desc: 'Compares the entity’s current 15-min egress volume against their 30-day personal baseline median and spread.',
@@ -22,7 +22,7 @@ export default function SignalsSection({ onLaunchDashboard }) {
     },
     {
       id: 'dest',
-      weight: 25,
+      weight: 15,
       title: 'Destination Policy & Novelty',
       formula: 'Category risk + domain novelty score',
       desc: 'Evaluates target SNI risk (personal storage like mega.nz, file drops like wetransfer.com, vs corporate cloud storage).',
@@ -30,10 +30,10 @@ export default function SignalsSection({ onLaunchDashboard }) {
     },
     {
       id: 'iso',
-      weight: 20,
+      weight: 40,
       title: 'Isolation Forest Anomaly',
       formula: 'Multivariate tree isolation score (0-1)',
-      desc: 'Unsupervised ML model trained on normalized window features (packet sizes, burst ratios, off-hours timing).',
+      desc: 'Unsupervised ML model trained on 17 window features covering byte volume and direction, user/peer deviation, destination and port novelty, JA4 rarity, timing, duration, and cumulative behavior.',
       icon: '🌲',
     },
     {
@@ -56,9 +56,9 @@ export default function SignalsSection({ onLaunchDashboard }) {
 
   // Calculate composite score
   const totalScore = Math.round(
-    (signalValues.self * 0.30) +
-    (signalValues.dest * 0.25) +
-    (signalValues.iso * 0.20) +
+    (signalValues.self * 0.20) +
+    (signalValues.dest * 0.15) +
+    (signalValues.iso * 0.40) +
     (signalValues.peer * 0.15) +
     (signalValues.leak * 0.10)
   )
@@ -78,14 +78,14 @@ export default function SignalsSection({ onLaunchDashboard }) {
   }
 
   const applyPreset = (preset) => {
-    if (preset === 's2') {
+    if (preset === 's1') {
       setSignalValues({ self: 95, dest: 90, iso: 88, peer: 75, leak: 60 })
-    } else if (preset === 's3') {
+    } else if (preset === 's2') {
       setSignalValues({ self: 45, dest: 70, iso: 50, peer: 55, leak: 85 })
-    } else if (preset === 's1') {
-      setSignalValues({ self: 20, dest: 10, iso: 25, peer: 15, leak: 10 })
-    } else if (preset === 's6') {
-      setSignalValues({ self: 55, dest: 25, iso: 40, peer: 30, leak: 20 })
+    } else if (preset === 's3') {
+      setSignalValues({ self: 70, dest: 80, iso: 95, peer: 65, leak: 45 })
+    } else if (preset === 's4') {
+      setSignalValues({ self: 25, dest: 10, iso: 20, peer: 20, leak: 10 })
     }
   }
 
@@ -165,28 +165,28 @@ export default function SignalsSection({ onLaunchDashboard }) {
                   className="btn-preset"
                   onClick={() => applyPreset('s2')}
                 >
-                  S2: Midnight Mega.nz (High)
+                  S1: Off-Hours Burst Exfiltration
                 </button>
                 <button
                   type="button"
                   className="btn-preset"
                   onClick={() => applyPreset('s3')}
                 >
-                  S3: WeTransfer Slow-Leak
+                  S2: Low-and-Slow Leak
                 </button>
                 <button
                   type="button"
                   className="btn-preset"
                   onClick={() => applyPreset('s1')}
                 >
-                  S1: 2 GB Dev Build (Clean)
+                  S3: Rare Client + Port Evasion
                 </button>
                 <button
                   type="button"
                   className="btn-preset"
-                  onClick={() => applyPreset('s6')}
+                  onClick={() => applyPreset('s4')}
                 >
-                  S6: New Laptop Sync
+                  S4: Legitimate Engineering Release
                 </button>
               </div>
             </div>
@@ -222,16 +222,16 @@ export default function SignalsSection({ onLaunchDashboard }) {
                 <div className="breakdown-title">Signal Contribution Breakdown:</div>
                 <div className="breakdown-list">
                   <div className="breakdown-row">
-                    <span>Self-Baseline (30%)</span>
-                    <span className="breakdown-val">+{Math.round(signalValues.self * 0.30)} pts</span>
+                    <span>Self-Baseline (20%)</span>
+                    <span className="breakdown-val">+{Math.round(signalValues.self * 0.20)} pts</span>
                   </div>
                   <div className="breakdown-row">
-                    <span>Destination Policy (25%)</span>
-                    <span className="breakdown-val">+{Math.round(signalValues.dest * 0.25)} pts</span>
+                    <span>Destination Policy (15%)</span>
+                    <span className="breakdown-val">+{Math.round(signalValues.dest * 0.15)} pts</span>
                   </div>
                   <div className="breakdown-row">
-                    <span>Isolation Forest (20%)</span>
-                    <span className="breakdown-val">+{Math.round(signalValues.iso * 0.20)} pts</span>
+                    <span>Isolation Forest (40%)</span>
+                    <span className="breakdown-val">+{Math.round(signalValues.iso * 0.40)} pts</span>
                   </div>
                   <div className="breakdown-row">
                     <span>Peer-Group Cohort (15%)</span>

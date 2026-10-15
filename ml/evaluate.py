@@ -244,8 +244,8 @@ def run(data_dir=None, out_path=None, test_from=None):
             float(results[name]["FP"]) / (n_users * n_weeks), 2
         )
 
-    # Time-to-first-alert for slow-leak scenarios
-    for sc in ["S3", "S5"]:
+    # Time-to-first-alert for the cumulative and multiday channel scenarios.
+    for sc in ["S2", "S3"]:
         for name, pred, _ in preds:
             d = days_to_first_alert(pred, eval_df, sc)
             results[name][f"days_to_first_{sc}"] = d

@@ -89,8 +89,16 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         run_script("generate.py", "--seed", str(args.seed), "--out_dir", out_dir)
         run_script("features.py", "--flows", os.path.join(out_dir, "flows.csv"), "--out-dir", out_dir)
-        run_script("baseline.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--out-dir", out_dir)
-        run_script("train.py", "--features", os.path.join(out_dir, "features_15m.csv"), "--user-bl", os.path.join(out_dir, "baselines_user.json"), "--out-dir", out_dir)
+        baseline_args = ["--features", os.path.join(out_dir, "features_15m.csv"), "--out-dir", out_dir]
+        train_args = ["--features", os.path.join(out_dir, "features_15m.csv"), "--user-bl", os.path.join(out_dir, "baselines_user.json"), "--out-dir", out_dir]
+        if args.train_until:
+            baseline_args += ["--train-until", args.train_until]
+            train_args += ["--train-until", args.train_until]
+        elif args.train_split:
+            baseline_args += ["--train-split", str(args.train_split)]
+            train_args += ["--train-split", str(args.train_split)]
+        run_script("baseline.py", *baseline_args)
+        run_script("train.py", *train_args)
         test_start = first_test_window(os.path.join(out_dir, "features_15m.csv"), args.train_split, args.train_until)
         score_args = ["--features", os.path.join(out_dir, "features_15m.csv"), "--data-dir", out_dir]
         evaluate_args = ["--data-dir", out_dir]

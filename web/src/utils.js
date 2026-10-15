@@ -49,12 +49,10 @@ export function categoryTag(cat) {
 
 export function scenarioLabel(sc) {
   const map = {
-    S1: '⚒ S1: Heavy Uploader',
-    S2: '🚨 S2: Midnight Upload',
-    S3: '🐌 S3: Low-and-Slow',
-    S4: '🔧 S4: Sync Tool',
-    S5: '📈 S5: Departing Employee',
-    S6: '💻 S6: New Laptop (Hard –)',
+    S1: '🚨 S1: Off-Hours Burst',
+    S2: '🐌 S2: Low-and-Slow Leak',
+    S3: '🔧 S3: Channel Evasion',
+    S4: '⚒ S4: Engineering Release Control',
     ALL: '🌐 Full Stream',
   }
   return map[sc] || sc

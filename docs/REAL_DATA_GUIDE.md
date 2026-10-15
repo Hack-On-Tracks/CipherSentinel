@@ -203,9 +203,9 @@ To ensure scientific validity and prevent circular tuning:
 ## 9. Risk Scoring & The "Sixth Parameter"
 
 ### Canonical Five Signals (Fixed 100 Points):
-1. **Self-Baseline Deviation (Weight: 30):** Robust z-score via median and MAD bucketed by hour-of-week.
-2. **Destination Policy & Novelty (Weight: 25):** TLS SNI policy risk (personal storage, file transfer, anonymizer) + first-contact flag.
-3. **Isolation Forest (Weight: 20):** Unsupervised multivariate anomaly detector trained on normalized window features.
+1. **Isolation Forest (Weight: 40):** Primary unsupervised multivariate anomaly detector trained on 17 normalized window features.
+2. **Self-Baseline Deviation (Weight: 20):** Robust z-score via median and MAD bucketed by hour-of-week.
+3. **Destination Policy & Novelty (Weight: 15):** TLS SNI policy risk (personal storage, file transfer, anonymizer) + first-contact flag.
 4. **Peer-Group Deviation (Weight: 15):** Cohort deviation against role peers (Engineering, Finance, HR, Sales).
 5. **Slow-Leak Accumulator (Weight: 10):** Rolling 7-day outbound volume to unsanctioned destinations.
 
@@ -214,8 +214,8 @@ To ensure scientific validity and prevent circular tuning:
 ### Clarification on "Six Parameters":
 The repository defines:
 - **5 weighted detection signals** (sum = 100)
-- **6 injected evaluation scenarios** (S1 to S6)
-- **9 normalized feature columns** for Isolation Forest
-- **11 window features**
+- **4 priority-ordered synthetic demo scenarios** (S1 to S4); benchmark evaluation uses the dataset's held-out labels.
+- **17 normalized feature columns** for Isolation Forest
+- **4 synthetic demo scenarios**
 
 If an organization wishes to integrate an optional 6th signal (e.g. device certificate trust posture from PKI, client process authenticity, or external threat indicator), configure `SIXTH_SIGNAL_CONFIG` in `api/config.py`. By default, it is inactive to preserve the canonical 100-point detection governance contract.

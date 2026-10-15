@@ -231,6 +231,7 @@ def ingest_zeek(
     uid_col = col_map.get("uid", "uid")
     orig_h_col = col_map.get("id.orig_h") or col_map.get("orig_h") or col_map.get("id_orig_h")
     resp_h_col = col_map.get("id.resp_h") or col_map.get("resp_h") or col_map.get("id_resp_h")
+    resp_port_col = col_map.get("id.resp_p") or col_map.get("resp_p") or col_map.get("id_resp_p")
     duration_col = col_map.get("duration", "duration")
     orig_bytes_col = col_map.get("orig_bytes") or col_map.get("orig_ip_bytes")
     resp_bytes_col = col_map.get("resp_bytes") or col_map.get("resp_ip_bytes")
@@ -317,6 +318,9 @@ def ingest_zeek(
         "ja4": merged["ja4"],
         "label": labels,
         "scenario": scenarios,
+        "dst_port": pd.to_numeric(merged[resp_port_col], errors="coerce") if resp_port_col and resp_port_col in merged.columns else np.nan,
+        "dest_region": "unknown",
+        "dest_country": "unknown",
     })
 
     canonical = canonical.sort_values("ts").reset_index(drop=True)
@@ -365,6 +369,9 @@ def ingest_flow_csv(
     c_ja4 = find_col(["ja4", "ja3", "fingerprint"])
     c_lbl = find_col(["label", "class", "attack"])
     c_sc = find_col(["scenario", "scenario_id"])
+    c_dst_port = find_col(["dst_port", "dest_port", "destination_port", "id.resp_p", "dest_port_zeek"])
+    c_region = find_col(["dest_region", "destination_region", "region"])
+    c_country = find_col(["dest_country", "destination_country", "country"])
 
     ts_series = df[c_ts].apply(normalize_timestamp) if c_ts else pd.Series(pd.Timestamp.now(tz="UTC"), index=df.index)
     src_ips = df[c_src].fillna("0.0.0.0").astype(str) if c_src else pd.Series("0.0.0.0", index=df.index)
@@ -420,6 +427,9 @@ def ingest_flow_csv(
         "ja4": ja4_series,
         "label": norm_labels,
         "scenario": scenarios,
+        "dst_port": pd.to_numeric(df[c_dst_port], errors="coerce") if c_dst_port else np.nan,
+        "dest_region": df[c_region].fillna("unknown").astype(str) if c_region else "unknown",
+        "dest_country": df[c_country].fillna("unknown").astype(str) if c_country else "unknown",
     })
 
     canonical = canonical.sort_values("ts").reset_index(drop=True)

@@ -5,14 +5,21 @@ import { AlertDetail } from '../components/AlertCard.jsx'
 
 export const SCENARIOS = [
   {
-    id: 'S1',
-    title: 'Normal engineering traffic',
+    id: 'S4',
+    title: 'Legitimate engineering release',
     expected: 'Expected: no alert',
     tone: 'green',
     dotColor: '#f59e0b',
     entity: 'U-000',
     role: 'engineer',
-    desc: '2 GB build uploads to sanctioned cloud storage during working hours.',
+    desc: 'A large release artifact goes to a familiar sanctioned service during the engineer’s normal work schedule.',
+    isoInputs: [
+      ['out_bytes_log', 'Measures transfer size while evaluating the surrounding behavior.'],
+      ['out_z + peer_z', 'Checks whether the volume is unusual for this engineer and engineering peers.'],
+      ['new_dest_user + new_dest_org', 'Checks whether the destination is established.'],
+      ['is_off_hours + active_hours_dev', 'Checks whether activity fits the normal schedule.'],
+      ['novel_dst_port + category_risk', 'Checks whether the service port and destination category are expected.'],
+    ],
     destination: 'github.com',
     category: 'Code Repository',
     events: [
@@ -24,14 +31,21 @@ export const SCENARIOS = [
     ],
   },
   {
-    id: 'S2',
-    title: 'Large suspicious transfer',
+    id: 'S1',
+    title: 'Off-hours high-volume exfiltration',
     expected: 'Expected: high alert',
     tone: 'red',
     dotColor: '#ef4444',
     entity: 'U-008',
     role: 'finance',
-    desc: 'A finance user sends 400 MB to mega.nz at 02:00.',
+    desc: 'A finance user sends a large upload to a new risky destination at 02:00 through an unusual port and rare client.',
+    isoInputs: [
+      ['out_bytes_log + byte_asymmetry', 'Detects large, upload-heavy traffic.'],
+      ['out_z + peer_z', 'Compares the event with personal and peer behavior.'],
+      ['new_dest_user + bytes_to_novel_dst_log', 'Tracks a first-seen destination and transfer volume to it.'],
+      ['is_off_hours + active_hours_dev', 'Detects schedule deviation.'],
+      ['novel_dst_port + ja4_rare', 'Detects an unusual service port and client fingerprint.'],
+    ],
     destination: 'mega.nz',
     category: 'Personal File Sharing',
     events: [
@@ -50,14 +64,14 @@ export const SCENARIOS = [
           entity: 'U-008',
           role: 'finance',
           window: '2026-10-15 02:00',
-          risk: 87,
+          risk: 81,
           severity: 'high',
           signals: [
-            { name: 'self_deviation', points: 28, label: 'Self-baseline', detail: '400 MB out vs median 3.2 MB (z = 61.0)' },
-            { name: 'destination_policy', points: 25, label: 'Destination policy', detail: 'mega.nz (personal file-sharing; first contact for user)' },
-            { name: 'isolation_forest', points: 18, label: 'Isolation Forest', detail: 'anomaly score 0.90 (0 = normal, 1 = anomalous)' },
-            { name: 'peer_deviation', points: 11, label: 'Peer-group baseline', detail: 'z = 7.0 vs role cohort (finance)' },
-            { name: 'slow_leak', points: 5, label: 'Seven-day accumulator', detail: '421 MB cumulative (7-day) to untrusted share' },
+            { name: 'self_deviation', points: 18, label: 'Self-baseline', detail: '400 MB out vs median 3.2 MB (z = 61.0)' },
+            { name: 'destination_policy', points: 12, label: 'Destination policy', detail: 'mega.nz (personal file-sharing; first contact for user)' },
+            { name: 'isolation_forest', points: 36, label: 'Isolation Forest', detail: 'anomaly score 0.90 (0 = normal, 1 = anomalous)' },
+            { name: 'peer_deviation', points: 8, label: 'Peer-group baseline', detail: 'z = 7.0 vs role cohort (finance)' },
+            { name: 'slow_leak', points: 7, label: 'Seven-day accumulator', detail: '421 MB cumulative (7-day) to untrusted share' },
           ],
           destination: { sni: 'mega.nz', category: 'Personal Share', first_seen_for_user: true },
           recommended_action: 'Escalate to security operations; verify transfer with user manager.'
@@ -67,26 +81,33 @@ export const SCENARIOS = [
     ],
   },
   {
-    id: 'S3',
-    title: 'Slow cumulative leak',
+    id: 'S2',
+    title: 'Low-and-slow cumulative leak',
     expected: 'Expected: cumulative alert',
     tone: 'amber',
     dotColor: '#f59e0b',
     entity: 'U-019',
     role: 'hr',
-    desc: 'HR user sends 40 MB each day for ten days to wetransfer.com.',
+    desc: 'An HR user sends modest repeated transfers to the same external service, including outside their normal activity hours.',
+    isoInputs: [
+      ['cum_out_7d_mb_log', 'Accumulates repeated transfers over a rolling week.'],
+      ['out_z + peer_z', 'Compares each event with personal and role behavior.'],
+      ['new_dest_user + category_risk', 'Adds destination familiarity and transfer-category context.'],
+      ['active_hours_dev', 'Flags activity outside the user’s established hours.'],
+      ['conn_count_log + byte_asymmetry', 'Describes connection cadence and upload direction.'],
+    ],
     destination: 'wetransfer.com',
     category: 'File Transfer',
     events: [
-      { window: '2026-10-12 10:00', out_bytes: 40_000_000, in_bytes: 1_100_000, conn_count: 8, cum_out_7d: 120_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
-      { window: '2026-10-13 10:00', out_bytes: 40_000_000, in_bytes: 1_200_000, conn_count: 8, cum_out_7d: 160_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
-      { window: '2026-10-14 10:00', out_bytes: 40_000_000, in_bytes: 1_050_000, conn_count: 9, cum_out_7d: 200_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
+      { window: '2026-10-12 20:00', out_bytes: 60_000_000, in_bytes: 1_100_000, conn_count: 8, cum_out_7d: 180_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
+      { window: '2026-10-13 20:00', out_bytes: 60_000_000, in_bytes: 1_200_000, conn_count: 8, cum_out_7d: 240_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
+      { window: '2026-10-14 20:00', out_bytes: 60_000_000, in_bytes: 1_050_000, conn_count: 9, cum_out_7d: 300_000_000, primary_sni: 'wetransfer.com', primary_category: 'File Transfer', alerts: [] },
       {
-        window: '2026-10-15 10:00',
-        out_bytes: 40_000_000,
+        window: '2026-10-15 20:00',
+        out_bytes: 60_000_000,
         in_bytes: 1_300_000,
         conn_count: 9,
-        cum_out_7d: 240_000_000,
+        cum_out_7d: 360_000_000,
         primary_sni: 'wetransfer.com',
         primary_category: 'File Transfer',
         alerts: [{
@@ -94,14 +115,14 @@ export const SCENARIOS = [
           entity: 'U-019',
           role: 'hr',
           window: '2026-10-15 10:00',
-          risk: 55,
+          risk: 62,
           severity: 'review',
           signals: [
-            { name: 'self_deviation', points: 12, label: 'Self-baseline', detail: '40.0 MB out vs median 1.2 MB (z = 8.5)' },
-            { name: 'destination_policy', points: 18, label: 'Destination policy', detail: 'wetransfer.com repeated external transfer' },
-            { name: 'isolation_forest', points: 10, label: 'Isolation Forest', detail: 'anomaly score 0.50' },
-            { name: 'peer_deviation', points: 9, label: 'Peer-group baseline', detail: 'z = 6.0 vs role cohort (hr)' },
-            { name: 'slow_leak', points: 6, label: 'Seven-day accumulator', detail: 'Cumulative anomalous transfer 240 MB' },
+            { name: 'self_deviation', points: 12, label: 'Self-baseline', detail: '60 MB daily egress vs personal baseline' },
+            { name: 'destination_policy', points: 12, label: 'Destination policy', detail: 'wetransfer.com repeated external transfer' },
+            { name: 'isolation_forest', points: 24, label: 'Isolation Forest', detail: 'anomaly score 0.50' },
+            { name: 'peer_deviation', points: 8, label: 'Peer-group baseline', detail: 'z = 6.0 vs role cohort (hr)' },
+            { name: 'slow_leak', points: 6, label: 'Seven-day accumulator', detail: 'Cumulative anomalous transfer 360 MB' },
           ],
           destination: { sni: 'wetransfer.com', category: 'File Transfer', first_seen_for_user: false },
           recommended_action: 'Investigate further; verify whether transfer was authorized.'
@@ -110,14 +131,21 @@ export const SCENARIOS = [
     ],
   },
   {
-    id: 'S4',
-    title: 'Irregular access pattern',
+    id: 'S3',
+    title: 'Rare tool and destination-port evasion',
     expected: 'Expected: review or high',
     tone: 'orange',
     dotColor: '#f59e0b',
     entity: 'U-009',
     role: 'finance',
-    desc: 'Finance sync-tool fingerprint connects to anonfiles.com over five days.',
+    desc: 'A finance user repeatedly sends data through a rare client, new region, anonymising destination, and unfamiliar port.',
+    isoInputs: [
+      ['ja4_rare', 'Detects an uncommon TLS client fingerprint.'],
+      ['novel_dst_port + risky_dst_port_share', 'Highlights a new or risky destination port.'],
+      ['new_region_and_destination', 'Marks a first-seen destination in a new region.'],
+      ['bytes_to_novel_dst_log + category_risk', 'Measures volume to the new channel and its category risk.'],
+      ['out_z + peer_z', 'Adds personal and finance-cohort context.'],
+    ],
     destination: 'anonfiles.com',
     category: 'Anonymous Upload',
     events: [
@@ -135,14 +163,14 @@ export const SCENARIOS = [
           entity: 'U-009',
           role: 'finance',
           window: '2026-10-15 14:15',
-          risk: 74,
+          risk: 72,
           severity: 'high',
           signals: [
-            { name: 'self_deviation', points: 20, label: 'Self-baseline', detail: '250 MB out vs median 2.8 MB (z = 15.0)' },
-            { name: 'destination_policy', points: 22, label: 'Destination policy', detail: 'anonfiles.com high-risk anonymous destination' },
-            { name: 'isolation_forest', points: 15, label: 'Isolation Forest', detail: 'anomaly score 0.70' },
-            { name: 'peer_deviation', points: 10, label: 'Peer-group baseline', detail: 'z = 6.0 vs finance cohort' },
-            { name: 'slow_leak', points: 7, label: 'Seven-day accumulator', detail: '295 MB cumulative (7-day)' },
+            { name: 'self_deviation', points: 12, label: 'Self-baseline', detail: '120 MB repeated outbound deviation' },
+            { name: 'destination_policy', points: 12, label: 'Destination policy', detail: 'filebin.net anonymising destination' },
+            { name: 'isolation_forest', points: 34, label: 'Isolation Forest', detail: 'anomaly score 0.70' },
+            { name: 'peer_deviation', points: 8, label: 'Peer-group baseline', detail: 'Compared with finance cohort' },
+            { name: 'slow_leak', points: 6, label: 'Seven-day accumulator', detail: 'Cumulative transfer over seven days' },
           ],
           destination: { sni: 'anonfiles.com', category: 'Anonymous File Host', first_seen_for_user: true },
           recommended_action: 'Escalate immediately; inspect host sync tool.'
@@ -150,94 +178,13 @@ export const SCENARIOS = [
       }
     ],
   },
-  {
-    id: 'S5',
-    title: 'Off-hour activity',
-    expected: 'Expected: medium alert',
-    tone: 'amber',
-    dotColor: '#f59e0b',
-    entity: 'U-024',
-    role: 'sales',
-    desc: 'Sales user ramps transfers and uses personal file-sharing destinations after hours.',
-    destination: 'dropbox.com',
-    category: 'Personal File Storage',
-    events: [
-      { window: '2026-10-15 21:00', out_bytes: 180_000_000, in_bytes: 8_000_000, conn_count: 19, cum_out_7d: 850_000_000, primary_sni: 'dropbox.com', primary_category: 'Personal File Storage', alerts: [] },
-      {
-        window: '2026-10-15 23:30',
-        out_bytes: 320_000_000,
-        in_bytes: 5_200_000,
-        conn_count: 22,
-        cum_out_7d: 1_170_000_000,
-        primary_sni: 'dropbox.com',
-        primary_category: 'Personal File Storage',
-        alerts: [{
-          id: 'a_0422',
-          entity: 'U-024',
-          role: 'sales',
-          window: '2026-10-15 23:30',
-          risk: 68,
-          severity: 'review',
-          signals: [
-            { name: 'self_deviation', points: 18, label: 'Self-baseline', detail: '320 MB out at 23:30 vs median 15 MB (z = 12.0)' },
-            { name: 'destination_policy', points: 20, label: 'Destination policy', detail: 'Personal storage access during off-hours' },
-            { name: 'isolation_forest', points: 13, label: 'Isolation Forest', detail: 'anomaly score 0.65' },
-            { name: 'peer_deviation', points: 8, label: 'Peer-group baseline', detail: 'z = 5.3 vs sales cohort' },
-            { name: 'slow_leak', points: 9, label: 'Seven-day accumulator', detail: '1.17 GB cumulative (7-day)' },
-          ],
-          destination: { sni: 'dropbox.com', category: 'Personal Storage', first_seen_for_user: false },
-          recommended_action: 'Review off-hour access activity with sales manager.'
-        }]
-      }
-    ],
-  },
-  {
-    id: 'S6',
-    title: 'Unusual external destination',
-    expected: 'Expected: high alert',
-    tone: 'red',
-    dotColor: '#ef4444',
-    entity: 'U-002',
-    role: 'engineer',
-    desc: 'Unusual outbound destination receiving bulk sensitive payload.',
-    destination: 'filebin.net',
-    category: 'Ephemeral File Storage',
-    events: [
-      { window: '2026-10-15 13:00', out_bytes: 15_000_000, in_bytes: 2_100_000, conn_count: 10, cum_out_7d: 180_000_000, primary_sni: 'gitlab.com', primary_category: 'Code Repository', alerts: [] },
-      {
-        window: '2026-10-15 15:40',
-        out_bytes: 650_000_000,
-        in_bytes: 3_800_000,
-        conn_count: 36,
-        cum_out_7d: 830_000_000,
-        primary_sni: 'filebin.net',
-        primary_category: 'Ephemeral File Storage',
-        alerts: [{
-          id: 'a_0512',
-          entity: 'U-002',
-          role: 'engineer',
-          window: '2026-10-15 15:40',
-          risk: 84,
-          severity: 'high',
-          signals: [
-            { name: 'self_deviation', points: 26, label: 'Self-baseline', detail: '650 MB out vs median 20 MB (z = 32.0)' },
-            { name: 'destination_policy', points: 24, label: 'Destination policy', detail: 'filebin.net ephemeral file drop service' },
-            { name: 'isolation_forest', points: 17, label: 'Isolation Forest', detail: 'anomaly score 0.88' },
-            { name: 'peer_deviation', points: 10, label: 'Peer-group baseline', detail: 'z = 6.2 vs engineer cohort' },
-            { name: 'slow_leak', points: 7, label: 'Seven-day accumulator', detail: '830 MB cumulative (7-day)' },
-          ],
-          destination: { sni: 'filebin.net', category: 'Ephemeral Storage', first_seen_for_user: true },
-          recommended_action: 'High severity: block destination IP and notify CIRT.'
-        }]
-      }
-    ],
-  },
+
 ]
 
 const SIGNALS = [
-  ['self_deviation', 'Self-baseline', 30],
-  ['destination_policy', 'Destination policy', 25],
-  ['isolation_forest', 'Isolation Forest', 20],
+  ['self_deviation', 'Self-baseline', 20],
+  ['destination_policy', 'Destination policy', 15],
+  ['isolation_forest', 'Isolation Forest', 40],
   ['peer_deviation', 'Peer-group baseline', 15],
   ['slow_leak', 'Seven-day accumulator', 10],
 ]
@@ -249,7 +196,7 @@ function prettyBytes(value = 0) {
 }
 
 export default function ReplayPage() {
-  const [selectedScenarioId, setSelectedScenarioId] = useState('S1')
+  const [selectedScenarioId, setSelectedScenarioId] = useState('S4')
   const [dropdownOpen, setDropdownOpen] = useState(true)
   const [result, setResult] = useState(null)
   const [index, setIndex] = useState(-1)
@@ -382,6 +329,10 @@ export default function ReplayPage() {
           <p className="replay-desc-line">
             Explore how encrypted traffic behaviour changes and how CipherSentinel detects suspicious activity.
           </p>
+          <div className="replay-iso-params">
+            <strong>Isolation Forest inputs used in this scenario</strong>
+            <ul>{activeScenarioDef.isoInputs.map(([feature, purpose]) => <li key={feature}><code>{feature}</code>: {purpose}</li>)}</ul>
+          </div>
           <p className="replay-privacy-line">
             Uses synthetic traffic and network metadata. No payload decryption or real employee monitoring.
           </p>

@@ -33,7 +33,7 @@ export default function HowItWorksSection() {
       subtitle: 'Multivariate anomaly detection mapped to MITRE ATT&CK T1567',
       icon: <Sliders size={22} color="#064E3B" strokeWidth={2} />,
       points: [
-        'Combines self-deviation (30%), destination policy (25%), Isolation Forest (20%), peer cohorts (15%), and slow leaks (10%).',
+        'Combines Isolation Forest (40%), self-deviation (20%), destination policy (15%), peer cohorts (15%), and slow leaks (10%).',
         'Produces calibrated scores from 0 to 100: Info (0–39), Review (40–69), and High (70–100).',
         '7-day accumulator captures stealthy low-and-slow exfiltration designed to bypass burst alarms.',
       ],

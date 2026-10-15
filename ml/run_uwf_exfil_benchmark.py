@@ -62,6 +62,7 @@ def prepare_flows(benign_path: Path, attack_path: Path, out_dir: Path, train_fra
         "out_bytes": pd.to_numeric(combined["orig_bytes"], errors="coerce").fillna(0),
         "in_bytes": pd.to_numeric(combined["resp_bytes"], errors="coerce").fillna(0),
         "duration": pd.to_numeric(combined["duration"], errors="coerce").fillna(0),
+        "dst_port": pd.to_numeric(combined.get("dest_port_zeek", combined.get("dest_port", pd.Series(float("nan"), index=combined.index))), errors="coerce"),
         "label": combined["label"].astype(str),
         "scenario": combined["scenario"].fillna("").astype(str),
     })
@@ -161,6 +162,7 @@ def main():
         user_bl_path=str(out_dir / "baselines_user.json"),
         model_path=str(out_dir / "model.joblib"),
         scaler_path=str(out_dir / "scaler.joblib"),
+        peer_bl_path=str(out_dir / "baselines_peer.json"),
     )
     features = pd.read_csv(feat_path)
     manifest_path = out_dir / "manifest.json"
