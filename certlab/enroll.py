@@ -90,7 +90,7 @@ def initialize_ca(args: argparse.Namespace) -> None:
     run(["openssl", "genpkey", "-algorithm", "RSA", "-aes-256-cbc", "-pkeyopt", "rsa_keygen_bits:3072", "-out", str(key)])
     os.chmod(key, 0o600)
     try:
-        run(["openssl", "req", "-new", "-x509", "-key", str(key), "-sha256", "-days", "3650", "-subj", f"/O=CipherSentinel/{args.org}/CN={name}", "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0", "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-out", str(cert)])
+        run(["openssl", "req", "-new", "-x509", "-key", str(key), "-sha256", "-days", "3650", "-subj", f"/O=CipherSentinel/OU={args.org}/CN={name}", "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0", "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-out", str(cert)])
     except EnrollmentError:
         key.unlink(missing_ok=True)
         raise
@@ -168,6 +168,16 @@ def sign(args: argparse.Namespace) -> None:
     finally:
         extfile.unlink(missing_ok=True)
     os.chmod(dest, 0o644)
+    fields = cert_fields(dest)
+    ca_fingerprint = run(["openssl", "x509", "-in", str(ca_cert), "-noout", "-fingerprint", "-sha256"], capture=True).split("=", 1)[-1]
+    device["certificate_serial"] = fields.get("serial")
+    device["certificate_sha256"] = fields.get("sha256 Fingerprint", "").replace(":", "").lower()
+    device["issuing_ca"] = ORG_CA[args.org]
+    device["issuing_ca_sha256"] = ca_fingerprint.replace(":", "").lower()
+    device["not_before"] = fields.get("notBefore")
+    device["not_after"] = fields.get("notAfter")
+    device["enrollment_status"] = "certificate-issued-install-pending"
+    save_inventory(data)
     print(f"Signed {dest}. The owner must verify the cert and install it before enrollment is considered complete.")
 
 
@@ -201,6 +211,7 @@ def verify(args: argparse.Namespace) -> None:
     device["certificate_serial"] = fields.get("serial")
     device["certificate_sha256"] = fields.get("sha256 Fingerprint", "").replace(":", "").lower()
     device["issuing_ca"] = ORG_CA[args.org]
+    device["issuing_ca_sha256"] = run(["openssl", "x509", "-in", str(ca_cert), "-noout", "-fingerprint", "-sha256"], capture=True).split("=", 1)[-1].replace(":", "").lower()
     device["not_before"] = fields.get("notBefore")
     device["not_after"] = fields.get("notAfter")
     device["enrollment_status"] = "certificate-verified-install-pending"

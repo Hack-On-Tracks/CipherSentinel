@@ -9,6 +9,7 @@ export const fetchAlerts    = (live = false) => api.get('/api/alerts', { params:
 export const fetchAlert     = (id) => api.get(`/api/alerts/${id}`).then(r => r.data)
 export const fetchTimeline  = (id) => api.get(`/api/entities/${id}/timeline`).then(r => r.data)
 export const fetchEntities  = () => api.get('/api/entities').then(r => r.data)
+export const fetchCertificateDevices = () => api.get('/api/certificates/devices').then(r => r.data)
 export const fetchCompare   = () => api.get('/api/compare').then(r => r.data)
 export const fetchScenarios = () => api.get('/api/scenarios').then(r => r.data)
 
