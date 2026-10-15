@@ -30,7 +30,12 @@ export default function TransferPage() {
   async function signIn(e) {
     e.preventDefault(); setError(''); setMessage('')
     try { const result = await loginTransfer(deviceId, pin); setSession(result); sessionStorage.setItem(SESSION_KEY, JSON.stringify(result)); setPin('') }
-    catch (err) { setError(err.response?.data?.detail || 'Sign in failed') }
+    catch (err) {
+      const detail = err.response?.data?.detail
+      setError(err.response?.status === 404
+        ? 'The API server is running an older version. Restart the backend, then try signing in again.'
+        : detail || 'Sign in failed')
+    }
   }
   function signOut() { sessionStorage.removeItem(SESSION_KEY); setSession(null); setEvents([]); setMessage('') }
   async function transfer(e) {
