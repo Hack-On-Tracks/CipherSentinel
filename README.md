@@ -41,6 +41,24 @@ npm run dev
 
 The Vite dev server proxies `/api` to `localhost:8000` automatically.
 
+### Local device-transfer demo
+
+Open **File Transfer**, choose an active enrolled device, and sign in with the
+demo PIN `246810` (override with `CIPHERSENTINEL_DEMO_PIN`). Send a file up to
+5 MB to another device in the same organization to deliver it to that device's
+inbox. A transfer between ORG-A and ORG-B is blocked and recorded in the
+admin monitor. Sign in as **Admin dashboard** with the same demo PIN, or set a
+separate `CIPHERSENTINEL_ADMIN_PIN`.
+
+The transfer demo runs through the API host, so for multiple laptops the API
+and Vite server must be reachable from each client laptop (configure the
+frontend's `VITE_API_URL` and the API's `CORS_ORIGINS` with the host's
+addresses). The demo login associates a session with an enrolled inventory
+ID; it is not certificate-based mutual TLS. Use the certificate enrollment
+and RADIUS setup for actual device certificate authentication. Transfer
+events and delivered file bytes are held in API memory and are cleared when
+the API restarts.
+
 ### Prepared data and scenario replay
 
 `python run_pipeline.py` is the explicit preparation command. It uses seed 42 by

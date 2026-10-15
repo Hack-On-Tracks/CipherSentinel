@@ -8,11 +8,12 @@ import ReplayPage from './pages/ReplayPage.jsx'
 import EntitiesPage from './pages/EntitiesPage.jsx'
 import ComparePage from './pages/ComparePage.jsx'
 import LimitsPage from './pages/LimitsPage.jsx'
+import TransferPage from './pages/TransferPage.jsx'
 import LandingPage from './components/landing/LandingPage.jsx'
 import { fetchAlerts } from './api.js'
 import { MOCK_ALERTS } from './mockData.js'
 
-const VALID_PAGES = ['landing', 'dashboard', 'alerts', 'replay', 'entities', 'compare', 'limits']
+const VALID_PAGES = ['landing', 'dashboard', 'alerts', 'replay', 'entities', 'compare', 'limits', 'transfers']
 
 function getPageFromUrl() {
   const hash = window.location.hash.replace(/^#\/?/, '').toLowerCase()
@@ -49,6 +50,7 @@ export default function App() {
       entities: 'Entities & Baselines – CipherSentinel',
       compare: 'Model Benchmark – CipherSentinel',
       limits: 'System Limits – CipherSentinel',
+      transfers: 'Secure File Transfer – CipherSentinel',
     }
     document.title = titleMap[newPage] || 'CipherSentinel'
   }, [])
@@ -109,6 +111,7 @@ export default function App() {
       case 'entities':  return <EntitiesPage />
       case 'compare':   return <ComparePage />
       case 'limits':    return <LimitsPage />
+      case 'transfers': return <TransferPage />
       default:          return <Dashboard setPage={navigate} setSelectedAlert={setSelectedAlert} />
     }
   }

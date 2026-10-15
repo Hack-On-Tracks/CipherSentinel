@@ -10,6 +10,16 @@ export const fetchAlert     = (id) => api.get(`/api/alerts/${id}`).then(r => r.d
 export const fetchTimeline  = (id) => api.get(`/api/entities/${id}/timeline`).then(r => r.data)
 export const fetchEntities  = () => api.get('/api/entities').then(r => r.data)
 export const fetchCertificateDevices = () => api.get('/api/certificates/devices').then(r => r.data)
+export const loginTransfer = (device_id, pin) => api.post('/api/transfers/login', { device_id, pin }).then(r => r.data)
+export const fetchTransfers = (token) => api.get('/api/transfers', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.data)
+export const fetchTransferInbox = (token) => api.get('/api/transfers/inbox', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.data)
+export const sendTransfer = (token, payload) => api.post('/api/transfers', payload, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.data)
+export const downloadTransfer = async (token, id, filename) => {
+  const response = await api.get(`/api/transfers/${id}/download`, { headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' })
+  const url = URL.createObjectURL(response.data)
+  const link = document.createElement('a'); link.href = url; link.download = filename; link.click()
+  URL.revokeObjectURL(url)
+}
 export const fetchCompare   = () => api.get('/api/compare').then(r => r.data)
 export const fetchScenarios = () => api.get('/api/scenarios').then(r => r.data)
 

@@ -7,13 +7,16 @@ import sys
 import threading
 import time
 import ast
+import base64
+import secrets
+import mimetypes
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,6 +46,7 @@ state: dict[str, Any] = {
     "replay_scenario": None, "replay_thread": None, "replay_stop": None,
     "features": None, "timelines": {}, "user_bl": {}, "peer_bl": {},
     "model": None, "scaler": None, "evaluation": {}, "feedback": {},
+    "transfer_sessions": {}, "transfers": [], "transfer_files": {},
     "load_error": None,
 }
 lock = threading.RLock()
@@ -51,7 +55,7 @@ app = FastAPI(title="CipherSentinel API", version="1.1.0")
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()] or [
     "http://localhost:5173", "http://localhost:3000"
 ]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "Authorization"])
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -236,6 +240,145 @@ class FeedbackBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     verdict: str = Field(pattern="^(true_positive|false_positive)$")
     notes: str = Field(default="", max_length=2000)
+
+
+class DeviceLoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    device_id: str
+    pin: str = Field(min_length=4, max_length=32)
+
+
+class TransferBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to_device_id: str
+    filename: str = Field(min_length=1, max_length=180)
+    content_type: str = Field(default="application/octet-stream", max_length=120)
+    content_base64: str = Field(max_length=7_000_000)
+
+
+def _device_inventory() -> tuple[dict[str, Any], dict[str, Any]]:
+    inventory = _read_json(CERT_INVENTORY_PATH, {})
+    devices = {item.get("device_id"): item for item in inventory.get("devices", []) if isinstance(item, dict)}
+    return inventory, devices
+
+
+def _transfer_identity(authorization: str | None) -> tuple[str, dict[str, Any] | None]:
+    token = authorization.removeprefix("Bearer ") if authorization else ""
+    with lock:
+        identity = state["transfer_sessions"].get(token)
+    if not identity:
+        raise HTTPException(401, "Sign in with an enrolled device to continue")
+    if identity.get("role") == "admin":
+        return token, identity
+    _, devices = _device_inventory()
+    device = devices.get(identity.get("device_id"))
+    if not device or device.get("lifecycle_status") != "active" or device.get("enrollment_status") != "enrolled":
+        raise HTTPException(403, "This device is not currently enrolled and active")
+    return token, identity
+
+
+@app.post("/api/transfers/login")
+def transfer_login(body: DeviceLoginBody):
+    demo_pin = os.getenv("CIPHERSENTINEL_DEMO_PIN", "246810")
+    if body.device_id == "ADMIN":
+        if not secrets.compare_digest(body.pin, os.getenv("CIPHERSENTINEL_ADMIN_PIN", demo_pin)):
+            raise HTTPException(401, "Incorrect admin PIN")
+        identity = {"role": "admin", "device_id": "ADMIN"}
+    else:
+        if not secrets.compare_digest(body.pin, demo_pin):
+            raise HTTPException(401, "Incorrect demo PIN")
+        _, devices = _device_inventory()
+        device = devices.get(body.device_id)
+        if not device or device.get("enrollment_status") != "enrolled" or device.get("lifecycle_status") != "active":
+            raise HTTPException(403, "Choose an active enrolled device")
+        identity = {"role": "device", "device_id": body.device_id}
+    token = secrets.token_urlsafe(32)
+    with lock:
+        state["transfer_sessions"][token] = identity
+    return {"token": token, **identity}
+
+
+@app.get("/api/transfers/session")
+def transfer_session(authorization: str | None = Header(default=None)):
+    _, identity = _transfer_identity(authorization)
+    return identity
+
+
+@app.post("/api/transfers/logout")
+def transfer_logout(authorization: str | None = Header(default=None)):
+    token = authorization.removeprefix("Bearer ") if authorization else ""
+    with lock:
+        state["transfer_sessions"].pop(token, None)
+    return {"status": "signed_out"}
+
+
+@app.post("/api/transfers")
+def create_transfer(body: TransferBody, authorization: str | None = Header(default=None)):
+    _, identity = _transfer_identity(authorization)
+    if identity["role"] != "device":
+        raise HTTPException(403, "Admin sessions cannot send files")
+    _, devices = _device_inventory()
+    sender = devices[identity["device_id"]]
+    recipient = devices.get(body.to_device_id)
+    if not recipient or recipient.get("enrollment_status") != "enrolled" or recipient.get("lifecycle_status") != "active":
+        raise HTTPException(400, "Recipient must be an active enrolled device")
+    try:
+        raw = base64.b64decode(body.content_base64, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise HTTPException(400, "File data is invalid") from exc
+    if not raw or len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Choose a non-empty file up to 5 MB")
+    name = Path(body.filename).name
+    suspicious = Path(name).suffix.lower() in {".exe", ".dll", ".bat", ".cmd", ".ps1", ".sh", ".js", ".vbs"}
+    cross_org = sender.get("organization_id") != recipient.get("organization_id")
+    blocked = cross_org or suspicious
+    transfer_id = secrets.token_hex(8)
+    event = {
+        "id": transfer_id, "timestamp": datetime.now(timezone.utc).isoformat(),
+        "from_device_id": sender["device_id"], "from_org": sender["organization_id"],
+        "to_device_id": recipient["device_id"], "to_org": recipient["organization_id"],
+        "filename": name, "size_bytes": len(raw), "content_type": body.content_type,
+        "status": "blocked" if blocked else "delivered",
+        "reason": "Cross-organization transfer is not trusted" if cross_org else ("File type flagged by demo policy" if suspicious else None),
+        "classification": "malicious_activity" if blocked else "allowed",
+    }
+    with lock:
+        state["transfers"].insert(0, event)
+        if not blocked:
+            state["transfer_files"][transfer_id] = {"filename": name, "content_type": body.content_type, "data": raw, "to_device_id": recipient["device_id"]}
+    return event
+
+
+@app.get("/api/transfers")
+def list_transfers(authorization: str | None = Header(default=None)):
+    _, identity = _transfer_identity(authorization)
+    with lock:
+        events = list(state["transfers"])
+    if identity["role"] == "device":
+        events = [event for event in events if event["from_device_id"] == identity["device_id"] or event["to_device_id"] == identity["device_id"]]
+    return {"transfers": events}
+
+
+@app.get("/api/transfers/inbox")
+def transfer_inbox(authorization: str | None = Header(default=None)):
+    _, identity = _transfer_identity(authorization)
+    if identity["role"] != "device":
+        raise HTTPException(403, "Sign in as a device to view its inbox")
+    with lock:
+        items = [event for event in state["transfers"] if event["to_device_id"] == identity["device_id"] and event["status"] == "delivered"]
+    return {"transfers": items}
+
+
+@app.get("/api/transfers/{transfer_id}/download")
+def download_transfer(transfer_id: str, authorization: str | None = Header(default=None)):
+    from fastapi.responses import Response
+    _, identity = _transfer_identity(authorization)
+    with lock:
+        item = state["transfer_files"].get(transfer_id)
+    if not item or (identity["role"] != "admin" and identity["device_id"] != item["to_device_id"]):
+        raise HTTPException(404, "Delivered file not found")
+    safe_name = item["filename"].replace('"', "")
+    return Response(item["data"], media_type=item["content_type"], headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
 
 
 @app.post("/api/alerts/{alert_id}/feedback")
