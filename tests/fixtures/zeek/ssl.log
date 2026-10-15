@@ -1,0 +1,14 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	ssl
+#open	2026-03-01-09-00-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	version	cipher	curve	server_name	resumed	last_alert	next_protocol	established	cert_chain_fuids	client_cert_chain_fuids	subject	issuer	client_subject	client_issuer	san.dns	san.uri	san.email	san.ip	ja4
+#types	time	string	addr	port	addr	port	string	string	string	string	bool	string	string	bool	vector[string]	vector[string]	string	string	string	string	vector[string]	vector[string]	vector[string]	vector[string]	string
+1772355600.150000	C10001	192.0.2.10	54321	198.51.100.10	443	TLSv13	TLS_AES_128_GCM_SHA256	x25519	github.com	F	-	h2	T	-	-	-	-	-	-	-	-	-	-	t13d1516h2_8daaf6152771_b0da82dd1658
+1772355615.680000	C10002	192.0.2.10	54322	198.51.100.11	443	TLSv13	TLS_AES_256_GCM_SHA384	x25519	mega.nz	F	-	h2	T	-	-	-	-	-	-	-	-	-	-	t13d2020h2_ccccddddeeee_aabbccddeeff
+1772355900.130000	C10003	192.0.2.11	51234	203.0.113.50	443	TLSv13	TLS_AES_128_GCM_SHA256	x25519	s3.amazonaws.com	F	-	h2	T	-	-	-	-	-	-	-	-	-	-	t13d1516h2_8daaf6152771_b0da82dd1658
+1772356500.240000	C10004	192.0.2.11	51235	203.0.113.51	443	TLSv13	TLS_AES_128_GCM_SHA256	x25519	-	F	-	h2	T	-	-	-	-	-	-	-	-	-	-	t13d1516h2_8daaf6152771_b0da82dd1658
+1772357000.350000	C10005	192.0.2.12	49800	198.51.100.80	443	TLSv13	TLS_AES_128_GCM_SHA256	x25519	wetransfer.com	F	-	h2	T	-	-	-	-	-	-	-	-	-	-	t13d2020h2_ccccddddeeee_aabbccddeeff
+#close	2026-03-01-10-00-00

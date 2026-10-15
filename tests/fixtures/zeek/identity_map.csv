@@ -1,0 +1,4 @@
+ip,user_id,role
+192.0.2.10,U-101,finance
+192.0.2.11,U-102,engineer
+192.0.2.12,U-103,hr

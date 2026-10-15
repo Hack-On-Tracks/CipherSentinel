@@ -65,12 +65,13 @@ scenario injectors in `ml/generate.py`.
 ```
 CipherSentinel/
 ├── ml/
-│   ├── generate.py   # Synthetic users + 6 labelled scenarios
+│   ├── ingest.py     # Zeek (conn.log/ssl.log TSV & JSON) + Flow CSV ingestion
+│   ├── generate.py   # Synthetic users + 6 labelled scenarios (deterministic demo)
 │   ├── features.py   # Flows → 15-min / 24-h entity windows
-│   ├── baseline.py   # Median/MAD self + peer-group baselines
-│   ├── train.py      # Isolation Forest on normalised features
+│   ├── baseline.py   # Median/MAD self + peer-group baselines (leakage-prevented)
+│   ├── train.py      # Isolation Forest on normalised features (benign only)
 │   ├── score.py      # Five-signal fusion → alerts.json
-│   └── evaluate.py   # 4-method comparison (A/B/C/D)
+│   └── evaluate.py   # 4-method comparison (A/B/C/D) + PR-AUC & confusion matrix
 ├── api/
 │   ├── main.py       # FastAPI with 7 endpoints + replay engine
 │   └── config.py     # Weights, thresholds, destination categories
@@ -78,8 +79,25 @@ CipherSentinel/
 │   └── src/
 │       ├── pages/    # Dashboard, Alerts, Replay, Entities, Compare, Limits
 │       └── components/ # AlertCard with evidence modal
-└── data/             # Generated artefacts (not committed if large)
+└── data/             # Generated & ingested artefacts (manifest.json, flows.csv, etc.)
 ```
+
+### Real Network Data Ingestion (Zeek / Flow CSV)
+
+CipherSentinel supports ingestion and evaluation on real network metadata logs:
+```bash
+# Ingest Zeek conn.log + ssl.log with a 70/30 chronological train/test split:
+python run_pipeline.py --mode real \
+  --conn-log path/to/conn.log \
+  --ssl-log path/to/ssl.log \
+  --identity-map path/to/identity_map.csv \
+  --out-dir data/real \
+  --train-split 0.7
+
+# Or ingest generic Flow CSV:
+python run_pipeline.py --mode csv --flow-csv path/to/flows.csv --out-dir data/real
+```
+For offline PCAP extraction, identity mapping, and evaluation methodology, see [`docs/REAL_DATA_GUIDE.md`](docs/REAL_DATA_GUIDE.md).
 
 ## Detection approach
 

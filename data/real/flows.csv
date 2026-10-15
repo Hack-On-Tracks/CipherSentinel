@@ -1,0 +1,7 @@
+ts,user_id,role,src_ip,sni,dest_category,out_bytes,in_bytes,duration,ja4,label,scenario,flow_id
+2026-03-01 09:00:00.123456001+00:00,U-101,finance,192.0.2.10,github.com,sanctioned,15420,450000,12.5,t13d1516h2_8daaf6152771_b0da82dd1658,benign,normal_traffic,f_000000
+2026-03-01 09:00:15.654320955+00:00,U-101,finance,192.0.2.10,mega.nz,personal_file_sharing,420000000,12000,4.2,t13d2020h2_ccccddddeeee_aabbccddeeff,exfiltration,personal_cloud_upload,f_000001
+2026-03-01 09:05:00.111110926+00:00,U-102,engineer,192.0.2.11,s3.amazonaws.com,sanctioned,1250000,890000,120.0,t13d1516h2_8daaf6152771_b0da82dd1658,benign,build_push,f_000002
+2026-03-01 09:15:00.222222090+00:00,U-102,engineer,192.0.2.11,unknown,unknown,8500,14200,3.1,t13d1516h2_8daaf6152771_b0da82dd1658,benign,api_sync,f_000003
+2026-03-01 09:23:20.333333015+00:00,U-103,hr,192.0.2.12,wetransfer.com,file_transfer,45000000,35000,45.6,t13d2020h2_ccccddddeeee_aabbccddeeff,exfiltration,file_drop,f_000004
+2026-03-01 09:40:00.444443941+00:00,U-101,finance,192.0.2.10,unknown,unknown,450,1200,0.8,unknown,benign,web_browsing,f_000005

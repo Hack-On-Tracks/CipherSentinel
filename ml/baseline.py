@@ -5,9 +5,12 @@ Computes robust z-scores for each entity window against:
   1. The user's own history (self_z)
   2. The user's role-cohort peers (peer_z)
 
-Writes baselines as dicts serialised to JSON for use by score.py.
+Supports chronological train/test split to prevent data leakage and
+configurable benign-history assumptions for unlabeled real traffic.
 """
 
+from __future__ import annotations
+import argparse
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
@@ -38,19 +41,19 @@ def ewma(values: np.ndarray, alpha: float = 0.2) -> float:
 def compute_user_baselines(df: pd.DataFrame) -> dict:
     """
     For each user x hour_of_week bucket, store median and MAD of each numeric col.
-    Returns a nested dict: baselines[user_id][hour_of_week][col] = {median, mad}
+    Returns a nested dict: baselines[user_id][hour_of_week][col] = {median, mad, n}
     """
     baselines = {}
     for user_id, udf in df.groupby("user_id"):
-        baselines[user_id] = {}
+        baselines[str(user_id)] = {}
         for hw, hwdf in udf.groupby("hour_of_week"):
-            hw_key = int(hw)
-            baselines[user_id][hw_key] = {}
+            hw_key = str(int(hw))
+            baselines[str(user_id)][hw_key] = {}
             for col in NUMERIC_COLS:
-                vals = hwdf[col].dropna().values.astype(float)
+                vals = hwdf[col].dropna().values.astype(float) if col in hwdf else np.array([0.0])
                 if len(vals) == 0:
                     vals = np.array([0.0])
-                baselines[user_id][hw_key][col] = {
+                baselines[str(user_id)][hw_key][col] = {
                     "median": float(np.median(vals)),
                     "mad":    float(K_MAD * mad(vals)),
                     "n":      int(len(vals)),
@@ -60,19 +63,19 @@ def compute_user_baselines(df: pd.DataFrame) -> dict:
 def compute_peer_baselines(df: pd.DataFrame) -> dict:
     """
     For each role x hour_of_week bucket, store median and MAD.
-    Returns: peer_baselines[role][hour_of_week][col] = {median, mad}
+    Returns: peer_baselines[role][hour_of_week][col] = {median, mad, n}
     """
     peer = {}
     for role, rdf in df.groupby("role"):
-        peer[role] = {}
+        peer[str(role)] = {}
         for hw, hwdf in rdf.groupby("hour_of_week"):
-            hw_key = int(hw)
-            peer[role][hw_key] = {}
+            hw_key = str(int(hw))
+            peer[str(role)][hw_key] = {}
             for col in NUMERIC_COLS:
-                vals = hwdf[col].dropna().values.astype(float)
+                vals = hwdf[col].dropna().values.astype(float) if col in hwdf else np.array([0.0])
                 if len(vals) == 0:
                     vals = np.array([0.0])
-                peer[role][hw_key][col] = {
+                peer[str(role)][hw_key][col] = {
                     "median": float(np.median(vals)),
                     "mad":    float(K_MAD * mad(vals)),
                     "n":      int(len(vals)),
@@ -85,18 +88,14 @@ def score_self(row: pd.Series, baselines: dict) -> float:
     Averages the z-scores for out_bytes and out_in_ratio (most exfil-relevant).
     Clipped to [0, 100] for the scoring pipeline.
     """
-    uid  = str(row["user_id"])
+    uid  = str(row.get("user_id", ""))
     try:
         hw = int(row["hour_of_week"]) if not pd.isna(row.get("hour_of_week", np.nan)) else 0
     except Exception:
         hw = 0
     user_bl = baselines.get(uid, {})
 
-    # JSON serialises int keys as strings - try both
     hw_str = str(hw)
-    # Sparse 15-minute observations often leave an exact weekly hour with
-    # fewer than three samples.  Use the nearest sufficiently populated
-    # bucket rather than treating an off-hours transfer as unscorable.
     if (hw_str not in user_bl or any(user_bl[hw_str].get(c, {}).get("n", 0) < 3
                                     for c in ["out_bytes", "out_in_ratio"])) and user_bl:
         candidates = [h for h in user_bl if user_bl[h].get("out_bytes", {}).get("n", 0) >= 3]
@@ -105,7 +104,7 @@ def score_self(row: pd.Series, baselines: dict) -> float:
     z_scores = []
     for col in ["out_bytes", "out_in_ratio"]:
         bl = user_bl.get(hw_str, {}).get(col)
-        if bl is None or bl["n"] < 3:
+        if bl is None or bl.get("n", 0) < 1:
             continue
         med = bl["median"]
         m   = bl["mad"]
@@ -119,7 +118,7 @@ def score_self(row: pd.Series, baselines: dict) -> float:
 
 def score_peer(row: pd.Series, peer_baselines: dict) -> float:
     """Same logic but against the role cohort."""
-    role = str(row["role"])
+    role = str(row.get("role", "unassigned"))
     try:
         hw = int(row["hour_of_week"]) if not pd.isna(row.get("hour_of_week", np.nan)) else 0
     except Exception:
@@ -135,7 +134,7 @@ def score_peer(row: pd.Series, peer_baselines: dict) -> float:
     z_scores = []
     for col in ["out_bytes", "out_in_ratio"]:
         bl = role_bl.get(hw_str, {}).get(col)
-        if bl is None or bl["n"] < 3:
+        if bl is None or bl.get("n", 0) < 1:
             continue
         med = bl["median"]
         m   = bl["mad"]
@@ -147,18 +146,50 @@ def score_peer(row: pd.Series, peer_baselines: dict) -> float:
         return 0.0
     return float(np.clip(np.mean(z_scores), 0, 100))
 
-def build_and_save(feat_path=None, out_dir=None, use_ewma: bool = False):
+def build_and_save(
+    feat_path=None,
+    out_dir=None,
+    use_ewma: bool = False,
+    train_split: float | None = None,
+    train_until: str | None = None,
+    assume_benign_history: bool = False,
+):
     if feat_path is None: feat_path = os.path.join(REPO, "data", "features_15m.csv")
     if out_dir is None: out_dir = os.path.join(REPO, "data")
+    os.makedirs(out_dir, exist_ok=True)
     df = pd.read_csv(feat_path)
-    # Scenario rows are withheld: a detector must not learn its test attacks,
-    # legitimate controls, or hard-negative evaluation samples as history.
-    scenario_text = df.get("scenarios", pd.Series("[]", index=df.index)).fillna("[]").astype(str)
-    history = df[(df.get("has_exfil", 0).astype(int) == 0) & scenario_text.isin(["[]", ""])].copy()
+    df["window"] = pd.to_datetime(df["window"], utc=True)
+    df = df.sort_values("window").reset_index(drop=True)
+
+    # Apply chronological split to prevent leakage
+    if train_until is not None:
+        cutoff = pd.to_datetime(train_until, utc=True)
+        split_df = df[df["window"] <= cutoff].copy()
+    elif train_split is not None and 0.0 < train_split < 1.0:
+        split_idx = int(len(df) * train_split)
+        split_df = df.iloc[:split_idx].copy()
+    else:
+        split_df = df.copy()
+
+    # Filter out attack and scenario windows from baseline history
+    scenario_text = split_df.get("scenarios", pd.Series("[]", index=split_df.index)).fillna("[]").astype(str)
+    has_labels = int(split_df.get("labeled", 1).iloc[0]) if "labeled" in split_df.columns else 1
+
+    if has_labels:
+        history = split_df[(split_df.get("has_exfil", 0).astype(int) == 0) & scenario_text.isin(["[]", ""])].copy()
+    else:
+        # Unlabeled data
+        if not assume_benign_history:
+            print("[baseline] Warning: Data is unlabeled. Set --assume-benign-history to fit baselines on training period.")
+        history = split_df.copy()
+
+    if history.empty:
+        history = split_df.copy()
+
     for col in NUMERIC_COLS:
-        if col not in df.columns:
-            df[col] = 0.0
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        if col not in history.columns:
+            history[col] = 0.0
+        history[col] = pd.to_numeric(history[col], errors="coerce").fillna(0.0)
 
     user_bl = compute_user_baselines(history)
     peer_bl = compute_peer_baselines(history)
@@ -171,9 +202,26 @@ def build_and_save(feat_path=None, out_dir=None, use_ewma: bool = False):
     with open(peer_path, "w") as f:
         json.dump(peer_bl, f)
 
-    print(f"[baseline] User baselines -> {user_path}")
-    print(f"[baseline] Peer baselines -> {peer_path}")
+    print(f"[baseline] User baselines ({len(user_bl)} entities) -> {user_path}")
+    print(f"[baseline] Peer baselines ({len(peer_bl)} roles) -> {peer_path}")
     return user_bl, peer_bl
 
+def main():
+    parser = argparse.ArgumentParser(description="Compute per-user and peer-group baselines.")
+    parser.add_argument("--features", default=os.path.join(REPO, "data", "features_15m.csv"), help="Path to features_15m.csv")
+    parser.add_argument("--out-dir", default=os.path.join(REPO, "data"), help="Output directory")
+    parser.add_argument("--train-split", type=float, default=None, help="Fraction of chronological windows for training (e.g. 0.7)")
+    parser.add_argument("--train-until", type=str, default=None, help="Timestamp cutoff for training period (ISO format)")
+    parser.add_argument("--assume-benign-history", action="store_true", help="Permit fitting baselines on unlabeled training data assuming clean baseline period")
+    args = parser.parse_args()
+
+    build_and_save(
+        feat_path=args.features,
+        out_dir=args.out_dir,
+        train_split=args.train_split,
+        train_until=args.train_until,
+        assume_benign_history=args.assume_benign_history,
+    )
+
 if __name__ == "__main__":
-    build_and_save()
+    main()

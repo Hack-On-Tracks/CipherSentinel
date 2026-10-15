@@ -1,0 +1,6 @@
+user_id,role,window,out_bytes,in_bytes,conn_count,max_duration,scenarios,has_exfil,labeled,primary_sni,dest_category,ja4_rare,out_in_ratio,hour_of_week,window_label,new_dest_user,new_dest_org,cum_out_7d
+U-101,finance,2026-03-01 09:00:00+00:00,420015420,462000,2,12.5,"['normal_traffic', 'personal_cloud_upload']",1,1,mega.nz,personal_file_sharing,1,909.1223179170607,153,15m,1,1,420015420.0
+U-102,engineer,2026-03-01 09:00:00+00:00,1250000,890000,1,120.0,['build_push'],0,1,s3.amazonaws.com,sanctioned,0,1.4044928039406697,153,15m,1,1,1250000.0
+U-102,engineer,2026-03-01 09:15:00+00:00,8500,14200,1,3.1,['api_sync'],0,1,unknown,unknown,0,0.5985493979297233,153,15m,0,0,8500.0
+U-103,hr,2026-03-01 09:15:00+00:00,45000000,35000,1,45.6,['file_drop'],1,1,wetransfer.com,file_transfer,1,1285.677552069941,153,15m,1,1,45000000.0
+U-101,finance,2026-03-01 09:30:00+00:00,450,1200,1,0.8,['web_browsing'],0,1,unknown,unknown,0,0.37468776019983346,153,15m,0,0,450.0

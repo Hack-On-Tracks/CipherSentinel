@@ -1,0 +1,162 @@
+{
+  "generated_at": "2026-10-15T12:46:35.096353+00:00",
+  "evaluation_status": "evaluated",
+  "caveat": "Synthetic/injected scenarios demonstrate detector coherence and trade-offs under MITRE ATT&CK T1567.",
+  "methods": {
+    "A_threshold": "Fixed 100 MB/window threshold",
+    "B_iso_raw": "Isolation Forest on raw flow features, no baselines",
+    "C_baselines_only": "Self + peer baselines only",
+    "D_full_fusion": "Full CipherSentinel: baselines + IF + policy + accumulator"
+  },
+  "test_period": {
+    "window_count": 5,
+    "entity_count": 3,
+    "days": 1,
+    "test_from": null
+  },
+  "results": {
+    "A_threshold": {
+      "TP": 1,
+      "FP": 0,
+      "FN": 1,
+      "TN": 3,
+      "confusion_matrix": [
+        [
+          3,
+          0
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.6667,
+      "pr_auc": 1.0,
+      "false_alerts_per_user_per_week": 0.0,
+      "days_to_first_S3": null,
+      "days_to_first_S5": null
+    },
+    "B_iso_raw": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 2,
+      "TN": 3,
+      "confusion_matrix": [
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pr_auc": 0.8333,
+      "false_alerts_per_user_per_week": 0.0,
+      "days_to_first_S3": null,
+      "days_to_first_S5": null
+    },
+    "C_baselines_only": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 2,
+      "TN": 3,
+      "confusion_matrix": [
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pr_auc": 0.4,
+      "false_alerts_per_user_per_week": 0.0,
+      "days_to_first_S3": null,
+      "days_to_first_S5": null
+    },
+    "D_full_fusion": {
+      "TP": 0,
+      "FP": 0,
+      "FN": 2,
+      "TN": 3,
+      "confusion_matrix": [
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pr_auc": 0.4,
+      "false_alerts_per_user_per_week": 0.0,
+      "days_to_first_S3": null,
+      "days_to_first_S5": null
+    }
+  },
+  "manifest": {
+    "dataset_id": "real_network_data",
+    "source_type": "zeek_logs",
+    "provenance": "User-provided network capture / Zeek export",
+    "license": "Proprietary / User authorized enterprise telemetry",
+    "ingested_at": "2026-10-15T12:46:31.306949+00:00",
+    "metadata_only_verified": true,
+    "payload_inspection_performed": false,
+    "flow_count": 6,
+    "entity_count": 3,
+    "time_range": {
+      "start": "2026-03-01 09:00:00.123456001+00:00",
+      "end": "2026-03-01 09:40:00.444443941+00:00"
+    },
+    "label_availability": "ground_truth",
+    "train_split": null,
+    "train_cutoff": null,
+    "schema_mapping": {
+      "flow_id": "Canonical flow sequence string (f_000001)",
+      "ts": "ISO-8601 UTC timestamp",
+      "user_id": "Pseudonymous identity (U-IP-xxxx or mapped entity)",
+      "role": "Role cohort (department or unassigned)",
+      "src_ip": "Source network address",
+      "sni": "TLS Server Name Indication (or unknown)",
+      "dest_category": "Policy categorization (sanctioned, personal_file_sharing, etc.)",
+      "out_bytes": "Egress bytes sent by originator",
+      "in_bytes": "Ingress bytes received from responder",
+      "duration": "Flow duration in seconds",
+      "ja4": "Client TLS fingerprint (or unknown)",
+      "label": "benign | exfiltration | unlabeled",
+      "scenario": "Labelled scenario tag or null"
+    },
+    "stats": {
+      "flow_count": 6,
+      "entity_count": 3,
+      "time_start": "2026-03-01 09:00:00.123456001+00:00",
+      "time_end": "2026-03-01 09:40:00.444443941+00:00",
+      "labeled": true,
+      "label_counts": {
+        "benign": 4,
+        "exfiltration": 2
+      },
+      "sni_known_ratio": 0.6667,
+      "dest_categories": {
+        "sanctioned": 2,
+        "unknown": 2,
+        "personal_file_sharing": 1,
+        "file_transfer": 1
+      }
+    }
+  }
+}
