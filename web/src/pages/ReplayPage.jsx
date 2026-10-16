@@ -227,6 +227,10 @@ export default function ReplayPage() {
 
   const current = result?.events?.[index] || null
   const currentAlert = current?.alerts?.[0] || null
+  const nextScoredEvent = result?.events?.slice(index + 1).find(event => event.alerts?.length) || null
+  const previousScoredEvent = index > 0 ? result?.events?.slice(0, index).filter(event => event.alerts?.length).at(-1) : null
+  const replayComplete = Boolean(result && index >= result.events.length - 1 && !playing)
+  const replayHasAlerts = Boolean(result?.events?.some(event => event.alerts?.length))
   const isOverFileSizeThreshold = Number(current?.out_bytes || 0) > 40_000_000
 
   const chartData = useMemo(() => {
@@ -688,8 +692,23 @@ export default function ReplayPage() {
                     <circle cx="15.5" cy="16.5" r="2.5" />
                     <line x1="17.5" y1="18.5" x2="20" y2="21" />
                   </svg>
+                  <strong className="detection-empty-title">
+                    {!current
+                      ? 'No event scored yet'
+                      : replayComplete
+                        ? replayHasAlerts ? 'No alert on this event' : 'No detection triggered'
+                        : nextScoredEvent ? 'No alert on this event' : 'No alert for this event'}
+                  </strong>
                   <span className="empty-message-small">
-                    Detection result appears as the replay reaches a scored event.
+                    {!current
+                      ? 'Start the replay to see the detection outcome for each event.'
+                      : replayComplete
+                        ? replayHasAlerts
+                          ? `This event did not trigger an alert. The previous scored event was ${String(previousScoredEvent?.window || '').replace('T', ' ').slice(0, 16)}.`
+                          : 'The replay completed without a scored alert for this scenario.'
+                        : nextScoredEvent
+                          ? `Next scored event: ${String(nextScoredEvent.window || '').replace('T', ' ').slice(0, 16)}.`
+                          : 'This event has no scored alert. The result will update if a later event is scored.'}
                   </span>
                 </div>
 

@@ -3495,6 +3495,13 @@ html, body {
   text-align: center;
 }
 
+.detection-empty-title {
+  color: #26352c;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .detection-baseline-footer {
   display: flex;
   align-items: center;
