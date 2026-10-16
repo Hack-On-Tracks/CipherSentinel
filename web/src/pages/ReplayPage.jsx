@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { replayScenario } from '../api.js'
 import { AlertDetail } from '../components/AlertCard.jsx'
 
@@ -600,7 +600,7 @@ export default function ReplayPage() {
             {chartData.length > 0 ? (
               <div className="chart-render-wrap">
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="replayOutGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
@@ -609,10 +609,12 @@ export default function ReplayPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f2" />
                     <XAxis dataKey="window" tick={{ fontSize: 11, fill: '#64748b' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis yAxisId="outbound" tick={{ fontSize: 11, fill: '#64748b' }} />
+                    <YAxis yAxisId="cumulative" orientation="right" tick={{ fontSize: 11, fill: '#64748b' }} />
                     <Tooltip formatter={(v) => `${Number(v).toFixed(1)} MB`} />
-                    <Area type="monotone" dataKey="outbound" stroke="#d97706" strokeWidth={2} fill="url(#replayOutGrad)" name="Outbound volume" />
-                    <Area type="monotone" dataKey="cumulative" stroke="#16a34a" strokeWidth={2} fill="none" name="Seven-day cumulative" />
+                    <Legend verticalAlign="top" height={28} />
+                    <Area yAxisId="outbound" type="monotone" dataKey="outbound" stroke="#d97706" strokeWidth={2} fill="url(#replayOutGrad)" name="Outbound per window" />
+                    <Area yAxisId="cumulative" type="monotone" dataKey="cumulative" stroke="#16a34a" strokeWidth={2} fill="none" name="Seven-day total" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
