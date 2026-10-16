@@ -333,6 +333,10 @@ export default function ReplayPage() {
           <p className="replay-desc-line">
             Explore how encrypted traffic behaviour changes and how CipherSentinel detects suspicious activity.
           </p>
+          <div className="scenario-overview" aria-live="polite">
+            <strong>Scenario overview</strong>
+            <p>{activeScenarioDef.desc}</p>
+          </div>
           <div className="replay-iso-params">
             <strong>Isolation Forest inputs used in this scenario</strong>
             <ul>{activeScenarioDef.isoInputs.map(([feature, purpose]) => <li key={feature}><code>{feature}</code>: {purpose}</li>)}</ul>
